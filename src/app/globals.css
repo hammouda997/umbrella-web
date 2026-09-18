@@ -3,25 +3,162 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f7f3ee;
+  --panel: #1a1414;
+  --color-page: #f7f3ee;
+  --color-surface: #ffffff;
+  --color-surface-2: #e5dbd4;
+  --color-border: #d8d0be;
+  --color-ink: #1a1414;
+  --color-ink-muted: #6b5e56;
+  --color-brand: #991211;
+  --color-brand-soft: #cb3228;
+  --color-brand-deep: #5c4842;
+  --color-gold: #986a36;
+  --color-cream-sand: #e1d2a7;
+  --chart-ext: #1a1414;
+  --chart-int: #991211;
+  --shadow-soft: 0 10px 30px rgba(26, 20, 20, 0.08);
+  --ink-rgb: 26 20 20;
+  --ink-muted-rgb: 107 94 86;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html.dark {
+  --bg: #0e0c0c;
+  --panel: #1a1414;
+  --color-page: #0e0c0c;
+  --color-surface: #1a1615;
+  --color-surface-2: #2a2422;
+  --color-border: #4a4240;
+  --color-ink: #ffffff;
+  --color-ink-muted: #e8e4df;
+  --color-brand: #ef5a50;
+  --color-brand-soft: #f0756c;
+  --color-brand-deep: #8a6f66;
+  --color-gold: #e8c07a;
+  --color-cream-sand: #6a5a42;
+  --chart-ext: #ffffff;
+  --chart-int: #ef5a50;
+  --shadow-soft: 0 12px 36px rgba(0, 0, 0, 0.5);
+  --ink-rgb: 255 255 255;
+  --ink-muted-rgb: 232 228 223;
+  color-scheme: dark;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-ink);
+  background: var(--color-page);
+  min-height: 100vh;
+}
+
+html.dark body,
+html.dark main {
+  color: #ffffff;
+}
+
+/* Force readable text in dark mode — overrides faded Tailwind classes */
+html.dark .text-ink,
+html.dark .text-ink-muted,
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark p,
+html.dark span,
+html.dark td,
+html.dark th,
+html.dark label,
+html.dark li,
+html.dark a:not([class*="bg-brand"]) {
+  color: #ffffff;
+}
+
+html.dark .text-ink-muted,
+html.dark .text-xs,
+html.dark .text-sm.text-ink-muted {
+  color: #e8e4df !important;
+}
+
+html.dark .text-brand,
+html.dark a.text-brand {
+  color: #ef5a50 !important;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  .bg-surface {
+    background-color: var(--color-surface);
+  }
+  .bg-page {
+    background-color: var(--color-page);
+  }
+  .bg-chart-ext {
+    background-color: var(--chart-ext);
+  }
+  .bg-chart-int {
+    background-color: var(--chart-int);
+  }
+}
+
+.portal-sidebar {
+  background-color: #1a1414 !important;
+  color: #ffffff !important;
+}
+
+.portal-sidebar a,
+.portal-sidebar button,
+.portal-sidebar p,
+.portal-sidebar span {
+  color: #ffffff !important;
+}
+
+.portal-sidebar .text-\[\#C49A5A\],
+.portal-sidebar [class*="text-[#C49A5A]"] {
+  color: #e8c07a !important;
+}
+
+.landing .hero-brand {
+  overflow: hidden;
+}
+
+.landing .hero-brand .char {
+  display: inline-block;
+  will-change: transform, opacity;
+}
+
+.landing .feat-item {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease,
+    box-shadow 0.35s ease;
+}
+
+.landing .feat-item:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--color-brand) 35%, var(--color-border));
+  box-shadow: var(--shadow-soft);
+}
+
+.landing .step-icon {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing .step-card:hover .step-icon {
+  transform: scale(1.06);
+}
+
+.landing .marquee-band {
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing .feat-item,
+  .landing .step-icon {
+    transition: none;
+  }
+  .landing .feat-item:hover {
+    transform: none;
   }
 }
