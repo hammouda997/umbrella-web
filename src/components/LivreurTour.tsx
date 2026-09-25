@@ -108,9 +108,13 @@ export function LivreurTour() {
     );
   }, [activeRaw, myPosition]);
 
-  const active = useMemo(() => {
+  const active = useMemo((): TourParcel[] => {
     if (!nearMe) return activeRaw;
-    return nearMe.map(({ distanceKm: _d, ...p }) => p as TourParcel);
+    return nearMe.map((item) => {
+      const { distanceKm, ...parcel } = item;
+      void distanceKm;
+      return parcel;
+    });
   }, [activeRaw, nearMe]);
 
   const done = useMemo(

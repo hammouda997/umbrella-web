@@ -135,7 +135,10 @@ export function searchLocalPlaces(query: string, limit = 12): AddressSuggestion[
   return hits
     .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label, "fr"))
     .slice(0, limit)
-    .map(({ score: _s, ...rest }) => rest);
+    .map(({ score, ...rest }) => {
+      void score;
+      return rest;
+    });
 }
 
 type PhotonFeature = {

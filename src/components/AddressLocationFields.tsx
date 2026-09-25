@@ -167,7 +167,7 @@ export function AddressLocationFields({
     [onChange, value.address, value.accuracyMeters],
   );
 
-  async function useMyLocation() {
+  async function captureMyLocation() {
     setLocating(true);
     setGeoMessage(null);
     const result = await getCurrentPositionPrecise();
@@ -263,7 +263,7 @@ export function AddressLocationFields({
           </button>
           <button
             type="button"
-            onClick={() => void useMyLocation()}
+            onClick={() => void captureMyLocation()}
             disabled={locating || permission === "unsupported"}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-cream bg-surface px-3.5 py-2 text-xs font-semibold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
           >
