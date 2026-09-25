@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { MapPin, RefreshCw, Route } from "lucide-react";
+import { Crosshair, MapPin, RefreshCw, Route } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
@@ -16,6 +16,15 @@ import {
   flattenTourStops,
   googleMapsTourUrl,
 } from "@/lib/tour-planner";
+import {
+  getCurrentPositionPrecise,
+  mapsNavigateUrl,
+  queryGeoPermission,
+} from "@/lib/geolocation";
+import {
+  estimateParcelCoords,
+  sortByDistanceFrom,
+} from "@/lib/geo-distance";
 import {
   EmptyState,
   LoadingBlock,
@@ -35,6 +44,8 @@ type TourParcel = {
   mode: "EXTERNAL" | "INTERNAL";
   price: string | number;
   notes?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 };
 
 export function LivreurTour() {
@@ -45,6 +56,12 @@ export function LivreurTour() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [tourActive, setTourActive] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [myPosition, setMyPosition] = useState<{
+    lat: number;
+    lng: number;
+    accuracyMeters: number;
+  } | null>(null);
   const [pending, setPending] = useState<{
     parcel: TourParcel;
     action: LivreurAction;
@@ -65,7 +82,7 @@ export function LivreurTour() {
       .finally(() => setLoading(false));
   }, [session]);
 
-  const active = useMemo(
+  const activeRaw = useMemo(
     () =>
       parcels.filter(
         (p) =>
@@ -78,22 +95,63 @@ export function LivreurTour() {
       ),
     [parcels],
   );
+
+  const nearMe = useMemo(() => {
+    if (!myPosition) return null;
+    return sortByDistanceFrom(activeRaw, myPosition, (p) =>
+      estimateParcelCoords({
+        lat: p.lat,
+        lng: p.lng,
+        city: p.city,
+        governorate: p.governorate,
+      }),
+    );
+  }, [activeRaw, myPosition]);
+
+  const active = useMemo(() => {
+    if (!nearMe) return activeRaw;
+    return nearMe.map(({ distanceKm: _d, ...p }) => p as TourParcel);
+  }, [activeRaw, nearMe]);
+
   const done = useMemo(
     () => parcels.filter((p) => ["LIVRES", "LIVRES_PAYES"].includes(p.status)),
     [parcels],
   );
 
   const places = useMemo(
-    () => (tourActive ? buildTourByPlaces(active) : []),
-    [tourActive, active],
+    () => (tourActive ? buildTourByPlaces(active, myPosition) : []),
+    [tourActive, active, myPosition],
   );
 
   const orderedStops = useMemo(() => flattenTourStops(places), [places]);
 
   const mapsUrl = useMemo(
-    () => googleMapsTourUrl(orderedStops),
-    [orderedStops],
+    () => googleMapsTourUrl(orderedStops, myPosition),
+    [orderedStops, myPosition],
   );
+
+  async function captureMyPosition() {
+    setLocating(true);
+    const permission = await queryGeoPermission();
+    if (permission === "unsupported") {
+      setMessage(
+        "Localisation indisponible. Utilisez HTTPS / localhost et activez le GPS.",
+      );
+      setLocating(false);
+      return;
+    }
+    const result = await getCurrentPositionPrecise();
+    if (!result.ok) {
+      setMessage(result.message);
+      setLocating(false);
+      return;
+    }
+    setMyPosition(result.coords);
+    setMessage(
+      `Position capturée (±${Math.round(result.coords.accuracyMeters)} m) — colis triés du plus proche.`,
+    );
+    setLocating(false);
+  }
 
   function demandTour() {
     if (active.length === 0) {
@@ -104,9 +162,11 @@ export function LivreurTour() {
     setMessage(null);
     window.setTimeout(() => {
       setTourActive(true);
-      const planned = buildTourByPlaces(active);
+      const planned = buildTourByPlaces(active, myPosition);
       setMessage(
-        `🗺️ Tournée prête · ${planned.length} lieu(x) · ${active.length} stop(s)`,
+        myPosition
+          ? `🗺️ Tournée prête depuis votre GPS · ${planned.length} lieu(x) · ${active.length} stop(s)`
+          : `🗺️ Tournée prête · ${planned.length} lieu(x) · ${active.length} stop(s). Activez « Ma position » pour plus de précision.`,
       );
       setGenerating(false);
     }, 450);
@@ -168,6 +228,7 @@ export function LivreurTour() {
   function renderParcelCard(
     p: TourParcel,
     stopIndex?: number,
+    distanceKm?: number | null,
   ) {
     const statusLabel =
       STATUS_META[p.status as StatusKey]?.label ?? p.status;
@@ -192,6 +253,13 @@ export function LivreurTour() {
             <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-muted">
               <MapPin className="h-3.5 w-3.5" />
               {p.city} · {p.governorate}
+              {distanceKm != null ? (
+                <span className="ml-1 font-semibold text-brand">
+                  · {distanceKm < 1
+                    ? `${Math.round(distanceKm * 1000)} m`
+                    : `${distanceKm.toFixed(1)} km`}
+                </span>
+              ) : null}
             </p>
           </div>
           <span
@@ -219,9 +287,11 @@ export function LivreurTour() {
             Appeler
           </a>
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-              `${p.address} ${p.city} Tunisie`,
-            )}`}
+            href={mapsNavigateUrl({
+              destLabel: `${p.address}, ${p.city}, ${p.governorate.replace(/_/g, " ")}, Tunisie`,
+              originLat: myPosition?.lat,
+              originLng: myPosition?.lng,
+            })}
             target="_blank"
             rel="noreferrer"
             className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
@@ -287,6 +357,19 @@ export function LivreurTour() {
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            disabled={locating}
+            onClick={() => void captureMyPosition()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-cream px-4 py-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <Crosshair className="h-4 w-4" />
+            {locating
+              ? "GPS…"
+              : myPosition
+                ? `Position ±${Math.round(myPosition.accuracyMeters)} m`
+                : "Ma position"}
+          </button>
           <button
             type="button"
             disabled={generating || active.length === 0}
@@ -392,9 +475,13 @@ export function LivreurTour() {
 
       {!loading && !tourActive && active.length > 0 ? (
         <ul className="space-y-4">
-          {active.map((p) => (
-            <li key={p.id}>{renderParcelCard(p)}</li>
-          ))}
+          {(nearMe ?? activeRaw.map((p) => ({ ...p, distanceKm: null }))).map(
+            (p) => (
+              <li key={p.id}>
+                {renderParcelCard(p, undefined, p.distanceKm)}
+              </li>
+            ),
+          )}
         </ul>
       ) : null}
 

@@ -2,20 +2,35 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AutocompleteField } from "@/components/AutocompleteField";
+import { BookUser, Camera, Clock3 } from "lucide-react";
+import {
+  AddressLocationFields,
+  type AddressLocationValue,
+} from "@/components/AddressLocationFields";
 import { Modal } from "@/components/Modal";
 import { ParcelDetailTable, type DetailParcel } from "@/components/ParcelDetailTable";
+import { loadAddressBook, type SavedAddress } from "@/lib/address-book";
+import { scoreAddress } from "@/lib/address-quality";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { DELIVERY_WINDOWS, type DeliveryWindowId } from "@/lib/delivery-windows";
+import { displayGovernorate } from "@/lib/normalize-text";
 import {
   RETURN_STATUSES,
   STATUS_META,
   type StatusKey,
 } from "@/lib/status-meta";
-import { governoratesWithCities } from "@/lib/tunisia-address";
 import { canSeeDeliveryMode } from "@/lib/roles";
 
-const GOVERNORATES = Object.keys(governoratesWithCities);
+const EMPTY_ADDRESS: AddressLocationValue = {
+  governorate: "",
+  city: "",
+  locality: "",
+  address: "",
+  lat: null,
+  lng: null,
+  accuracyMeters: null,
+};
 
 function FieldLabel({
   children,
@@ -65,21 +80,13 @@ export function ParcelsManager({
   const [exchange, setExchange] = useState(false);
   const [allowTry, setAllowTry] = useState(false);
   const [liabilityAccepted, setLiabilityAccepted] = useState(false);
-  const [governorate, setGovernorate] = useState("");
-  const [city, setCity] = useState("");
-  const [locality, setLocality] = useState("");
-
-  const cityOptions = useMemo(
-    () => (governorate ? governoratesWithCities[governorate] ?? [] : []),
-    [governorate],
-  );
-
-  const localityOptions = useMemo(() => {
-    if (!governorate) return [];
-    const cities = governoratesWithCities[governorate] ?? [];
-    if (!city) return cities;
-    return cities.filter((c) => c.toLowerCase() !== city.toLowerCase());
-  }, [governorate, city]);
+  const [location, setLocation] = useState<AddressLocationValue>(EMPTY_ADDRESS);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [deliveryWindow, setDeliveryWindow] =
+    useState<DeliveryWindowId>("journee");
+  const [landmarkPreview, setLandmarkPreview] = useState<string | null>(null);
+  const [landmarkName, setLandmarkName] = useState<string | null>(null);
+  const [forceWeakAddress, setForceWeakAddress] = useState(false);
 
   async function load() {
     if (!session?.accessToken) return;
@@ -92,6 +99,12 @@ export function ParcelsManager({
   useEffect(() => {
     load().catch((e: Error) => setMessage(e.message));
   }, [session]);
+
+  useEffect(() => {
+    if (openForm) setSavedAddresses(loadAddressBook());
+  }, [openForm]);
+
+  const addressQuality = useMemo(() => scoreAddress(location), [location]);
 
   const filtered = useMemo(() => {
     let list = parcels;
@@ -116,9 +129,33 @@ export function ParcelsManager({
     setExchange(false);
     setAllowTry(false);
     setLiabilityAccepted(false);
-    setGovernorate("");
-    setCity("");
-    setLocality("");
+    setLocation(EMPTY_ADDRESS);
+    setDeliveryWindow("journee");
+    setLandmarkPreview(null);
+    setLandmarkName(null);
+    setForceWeakAddress(false);
+  }
+
+  function applySavedAddress(entry: SavedAddress) {
+    setLocation({
+      governorate: entry.governorate,
+      city: entry.city,
+      locality: entry.locality,
+      address: entry.line,
+      lat: entry.lat ?? null,
+      lng: entry.lng ?? null,
+      accuracyMeters: null,
+    });
+    const form = document.getElementById(
+      "parcel-create-form",
+    ) as HTMLFormElement | null;
+    if (form) {
+      const name = form.elements.namedItem("recipientName") as HTMLInputElement | null;
+      const phone = form.elements.namedItem("phone") as HTMLInputElement | null;
+      if (name && entry.contact) name.value = entry.contact;
+      if (phone && entry.phone) phone.value = entry.phone;
+    }
+    setMessage(`Adresse « ${entry.label} » appliquée`);
   }
 
   function closeCreate() {
@@ -133,8 +170,17 @@ export function ParcelsManager({
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!session?.accessToken) return;
-    if (!governorate || !city) {
+    if (!location.governorate || !location.city) {
       setMessage("Gouvernorat et ville sont requis");
+      return;
+    }
+
+    const quality = scoreAddress(location);
+    if (quality.level === "weak" && !forceWeakAddress) {
+      setMessage(
+        "Adresse trop vague — précisez rue/GPS, ou confirmez quand même ci-dessous.",
+      );
+      setForceWeakAddress(true);
       return;
     }
 
@@ -148,10 +194,20 @@ export function ParcelsManager({
       return;
     }
 
-    const street = String(form.get("address") || "").trim();
-    const address = locality.trim()
-      ? `${locality.trim()}, ${street}`
+    const street = location.address.trim();
+    const address = location.locality.trim()
+      ? `${location.locality.trim()}, ${street}`
       : street;
+
+    const windowMeta = DELIVERY_WINDOWS.find((w) => w.id === deliveryWindow);
+    const noteParts = [
+      String(form.get("notes") || "").trim(),
+      windowMeta ? `Créneau: ${windowMeta.label} (${windowMeta.hint})` : "",
+      landmarkName ? `Repère photo: ${landmarkName}` : "",
+      location.lat != null && location.lng != null
+        ? `GPS: ${location.lat.toFixed(5)},${location.lng.toFixed(5)}`
+        : "",
+    ].filter(Boolean);
 
     setSaving(true);
     try {
@@ -162,13 +218,13 @@ export function ParcelsManager({
           recipientName: form.get("recipientName"),
           phone: form.get("phone"),
           phone2: form.get("phone2") || undefined,
-          governorate,
-          city,
+          governorate: location.governorate,
+          city: location.city,
           address,
           price: Number(form.get("price")),
           articleCount: Number(form.get("articleCount") || 1),
           designation: form.get("designation") || undefined,
-          notes: form.get("notes") || undefined,
+          notes: noteParts.join(" · ") || undefined,
           mode: showModes ? form.get("mode") : "EXTERNAL",
           allowOpen,
           tryProduct: allowOpen,
@@ -179,7 +235,12 @@ export function ParcelsManager({
             : undefined,
           paymentMode: form.get("paymentMode") || undefined,
           parcelCount: Number(form.get("parcelCount") || 1),
-          locality: locality || undefined,
+          locality: location.locality || undefined,
+          lat: location.lat ?? undefined,
+          lng: location.lng ?? undefined,
+          deliveryWindow,
+          landmarkPhotoName: landmarkName || undefined,
+          addressQuality: quality.score,
         }),
       });
       e.currentTarget.reset();
@@ -357,65 +418,118 @@ export function ParcelsManager({
             <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
               Adresse
             </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <FieldLabel htmlFor="governorate">Gouvernorat</FieldLabel>
-                <select
-                  id="governorate"
-                  name="governorate"
-                  required
-                  value={governorate}
-                  onChange={(e) => {
-                    setGovernorate(e.target.value);
-                    setCity("");
-                    setLocality("");
-                  }}
-                  className={fieldClass}
-                >
-                  <option value="">Sélectionner</option>
-                  {GOVERNORATES.map((g) => (
-                    <option key={g} value={g}>
-                      {g.replace(/_/g, " ")}
-                    </option>
+            {savedAddresses.length > 0 ? (
+              <div className="space-y-2">
+                <p className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                  <BookUser className="h-3.5 w-3.5" />
+                  Depuis le carnet
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {savedAddresses.slice(0, 6).map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => applySavedAddress(a)}
+                      className="rounded-full border border-cream bg-surface px-3 py-1.5 text-left text-xs font-semibold text-ink transition hover:border-brand hover:text-brand"
+                    >
+                      {a.label}
+                      <span className="mt-0.5 block font-normal text-ink-muted">
+                        {a.city}
+                        {a.governorate
+                          ? ` · ${displayGovernorate(a.governorate)}`
+                          : ""}
+                      </span>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
-              <AutocompleteField
-                label="Ville"
-                name="city"
-                value={city}
-                options={cityOptions}
-                onChange={(value) => {
-                  setCity(value);
-                  setLocality("");
-                }}
-                disabled={!governorate}
-                required
-                allowCustom={false}
-                placeholder="Rechercher une ville"
-              />
-              <div className="sm:col-span-2">
-                <AutocompleteField
-                  label="Localité"
-                  name="locality"
-                  value={locality}
-                  options={localityOptions}
-                  onChange={setLocality}
-                  disabled={!governorate}
-                  allowCustom
-                  placeholder="Rechercher une localité"
-                />
+            ) : null}
+            <AddressLocationFields
+              value={location}
+              onChange={(next) => {
+                setLocation(next);
+                setForceWeakAddress(false);
+              }}
+              required
+              fieldClass={fieldClass}
+            />
+            {forceWeakAddress && addressQuality.level === "weak" ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                Cliquez encore sur « Ajouter » pour confirmer malgré une adresse
+                faible ({addressQuality.score}/100).
+              </p>
+            ) : null}
+          </section>
+
+          <section className="space-y-3 border-t border-cream pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+              Créneau &amp; repère
+            </h3>
+            <div>
+              <p className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-ink">
+                <Clock3 className="h-4 w-4 text-brand" />
+                Créneau de livraison
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {DELIVERY_WINDOWS.map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => setDeliveryWindow(w.id)}
+                    className={`rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                      deliveryWindow === w.id
+                        ? "border-brand bg-brand/10 text-brand"
+                        : "border-cream-soft text-ink hover:border-brand/40"
+                    }`}
+                  >
+                    <span className="font-semibold">{w.label}</span>
+                    <span className="mt-0.5 block text-xs text-ink-muted">
+                      {w.hint}
+                    </span>
+                  </button>
+                ))}
               </div>
-              <div className="sm:col-span-2">
-                <FieldLabel htmlFor="address">Adresse complète</FieldLabel>
+            </div>
+            <div>
+              <FieldLabel htmlFor="landmarkPhoto">
+                Photo repère (optionnel)
+              </FieldLabel>
+              <label className="mt-1 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-cream-soft bg-cream-soft/20 px-4 py-5 text-center transition hover:border-brand/40">
+                <Camera className="h-5 w-5 text-brand" />
+                <span className="text-sm font-medium text-ink">
+                  {landmarkName ?? "Ajouter une photo du lieu (façade, pharmacie…)"}
+                </span>
+                <span className="text-[11px] text-ink-muted">
+                  Stockage local uniquement (démo front)
+                </span>
                 <input
-                  id="address"
-                  name="address"
-                  required
-                  autoComplete="street-address"
-                  className={fieldClass}
+                  id="landmarkPhoto"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setLandmarkName(file.name);
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setLandmarkPreview(
+                        typeof reader.result === "string" ? reader.result : null,
+                      );
+                    };
+                    reader.readAsDataURL(file);
+                  }}
                 />
-              </div>
+              </label>
+              {landmarkPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={landmarkPreview}
+                  alt="Repère"
+                  className="mt-3 max-h-40 w-full rounded-xl object-cover"
+                />
+              ) : null}
             </div>
           </section>
 

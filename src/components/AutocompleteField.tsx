@@ -8,6 +8,8 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { fuzzyFilterOptions } from "@/lib/location-search";
+import { bilingualLabel } from "@/lib/place-labels-ar";
 
 type AutocompleteFieldProps = {
   label: string;
@@ -19,6 +21,9 @@ type AutocompleteFieldProps = {
   disabled?: boolean;
   required?: boolean;
   allowCustom?: boolean;
+  emptyHint?: string;
+  bilingual?: boolean;
+  governorateKey?: string;
 };
 
 export function AutocompleteField({
@@ -31,6 +36,9 @@ export function AutocompleteField({
   disabled = false,
   required = false,
   allowCustom = true,
+  emptyHint,
+  bilingual = true,
+  governorateKey,
 }: AutocompleteFieldProps) {
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -52,13 +60,10 @@ export function AutocompleteField({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return options.slice(0, 40);
-    return options
-      .filter((opt) => opt.toLowerCase().includes(q))
-      .slice(0, 40);
-  }, [options, query]);
+  const filtered = useMemo(
+    () => fuzzyFilterOptions(options, query, 40),
+    [options, query],
+  );
 
   function commit(next: string) {
     onChange(next);
@@ -101,6 +106,8 @@ export function AutocompleteField({
         disabled={disabled}
         required={required}
         autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
         placeholder={disabled ? "Choisir gouvernorat d’abord" : placeholder}
         className="w-full rounded-lg border border-cream-soft bg-surface px-3 py-2.5 text-sm outline-none transition focus:border-brand disabled:cursor-not-allowed disabled:bg-cream-soft/40"
         onFocus={() => {
@@ -140,11 +147,21 @@ export function AutocompleteField({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => commit(opt)}
               >
-                {opt}
+                {bilingual
+                  ? bilingualLabel(opt, governorateKey)
+                  : opt.replace(/_/g, " ")}
               </button>
             </li>
           ))}
         </ul>
+      ) : null}
+      {open && !disabled && filtered.length === 0 && query.trim() ? (
+        <p className="absolute z-30 mt-1 w-full rounded-lg border border-cream-soft bg-surface px-3 py-2 text-xs text-ink-muted shadow-soft">
+          {emptyHint ??
+            (allowCustom
+              ? "Aucun résultat — vous pouvez saisir librement."
+              : "Aucun résultat. Affinez la recherche.")}
+        </p>
       ) : null}
     </div>
   );

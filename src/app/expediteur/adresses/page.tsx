@@ -1,40 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import {
+  AddressLocationFields,
+  type AddressLocationValue,
+} from "@/components/AddressLocationFields";
 import { PageHeader, Panel } from "@/components/ui";
+import {
+  loadAddressBook,
+  removeAddress,
+  upsertAddress,
+  type SavedAddress,
+} from "@/lib/address-book";
+import { displayGovernorate } from "@/lib/normalize-text";
 
-type Address = {
-  id: string;
-  label: string;
-  contact: string;
-  phone: string;
-  line: string;
-  city: string;
+const EMPTY_LOCATION: AddressLocationValue = {
+  governorate: "",
+  city: "",
+  locality: "",
+  address: "",
+  lat: null,
+  lng: null,
+  accuracyMeters: null,
 };
 
-const SEED: Address[] = [
-  {
-    id: "1",
-    label: "Entrepôt principal",
-    contact: "Demo Expéditeur",
-    phone: "21000000",
-    line: "Zone industrielle Charguia",
-    city: "Ariana",
-  },
-  {
-    id: "2",
-    label: "Point relais client VIP",
-    contact: "Amira Trabelsi",
-    phone: "98765432",
-    line: "Avenue Habib Bourguiba",
-    city: "Ezzahra",
-  },
-];
-
 export default function ExpediteurAdressesPage() {
-  const [list, setList] = useState(SEED);
+  const [list, setList] = useState<SavedAddress[]>([]);
   const [open, setOpen] = useState(false);
+  const [location, setLocation] = useState<AddressLocationValue>(EMPTY_LOCATION);
+
+  useEffect(() => {
+    setList(loadAddressBook());
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -44,7 +42,10 @@ export default function ExpediteurAdressesPage() {
         actions={
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              setOpen((v) => !v);
+              setLocation(EMPTY_LOCATION);
+            }}
             className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft"
           >
             <Plus className="h-4 w-4" />
@@ -59,19 +60,27 @@ export default function ExpediteurAdressesPage() {
             className="grid gap-3 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
+              if (!location.governorate || !location.city || !location.address) {
+                return;
+              }
               const fd = new FormData(e.currentTarget);
-              setList((prev) => [
-                {
-                  id: String(Date.now()),
-                  label: String(fd.get("label") || "Adresse"),
-                  contact: String(fd.get("contact") || ""),
-                  phone: String(fd.get("phone") || ""),
-                  line: String(fd.get("line") || ""),
-                  city: String(fd.get("city") || ""),
-                },
-                ...prev,
-              ]);
+              const next = upsertAddress({
+                id: `addr-${Date.now()}`,
+                label: String(fd.get("label") || "Adresse"),
+                contact: String(fd.get("contact") || ""),
+                phone: String(fd.get("phone") || ""),
+                line: location.locality
+                  ? `${location.locality}, ${location.address}`
+                  : location.address,
+                city: location.city,
+                governorate: location.governorate,
+                locality: location.locality,
+                lat: location.lat,
+                lng: location.lng,
+              });
+              setList(next);
               setOpen(false);
+              setLocation(EMPTY_LOCATION);
               e.currentTarget.reset();
             }}
           >
@@ -80,8 +89,6 @@ export default function ExpediteurAdressesPage() {
                 ["label", "Libellé"],
                 ["contact", "Contact"],
                 ["phone", "Téléphone"],
-                ["line", "Adresse"],
-                ["city", "Ville"],
               ] as const
             ).map(([name, label]) => (
               <label key={name} className="block text-sm sm:col-span-1">
@@ -93,6 +100,14 @@ export default function ExpediteurAdressesPage() {
                 />
               </label>
             ))}
+            <div className="sm:col-span-2">
+              <AddressLocationFields
+                value={location}
+                onChange={setLocation}
+                required
+                fieldClass="mt-1 w-full rounded-xl border border-cream-soft px-3 py-2 outline-none ring-brand focus:ring-2"
+              />
+            </div>
             <div className="sm:col-span-2">
               <button
                 type="submit"
@@ -115,13 +130,21 @@ export default function ExpediteurAdressesPage() {
                 <p className="text-sm text-ink-muted">{a.phone}</p>
                 <p className="mt-2 text-sm text-ink-muted">
                   {a.line}, {a.city}
+                  {a.governorate
+                    ? ` · ${displayGovernorate(a.governorate)}`
+                    : ""}
                 </p>
+                {a.lat != null && a.lng != null ? (
+                  <p className="mt-1 font-mono text-[10px] text-ink-muted">
+                    {a.lat.toFixed(5)}, {a.lng.toFixed(5)}
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"
-                aria-label="Supprimer"
-                onClick={() => setList((p) => p.filter((x) => x.id !== a.id))}
+                onClick={() => setList(removeAddress(a.id))}
                 className="h-9 w-9 shrink-0 rounded-lg border border-cream text-ink-muted hover:text-brand"
+                aria-label="Supprimer"
               >
                 <Trash2 className="mx-auto h-4 w-4" />
               </button>
