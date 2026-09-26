@@ -1,26 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { useMemo, useState } from "react";
+import { LayoutList, MapPinned, RefreshCw, Truck } from "lucide-react";
+import { errorText, useToast } from "@/components/Feedback";
 import { PlacesSmartView } from "@/components/PlacesSmartView";
+import {
+  Button,
+  EmptyState,
+  ErrorBanner,
+  PageHeader,
+  SearchInput,
+  SegmentedTabs,
+  StatCard,
+  StatusBadge,
+  TableCard,
+  inputClass,
+  tableClass,
+  tdClass,
+  theadClass,
+  thClass,
+  trClass,
+} from "@/components/ui";
+import { useAuth } from "@/lib/auth-context";
+import { cn } from "@/lib/cn";
+import type { Driver, Parcel, Zone } from "@/lib/domain";
 import { canSeeDeliveryMode } from "@/lib/roles";
-
-type ParcelRow = {
-  id: number;
-  code: string | null;
-  recipientName: string;
-  city: string;
-  governorate?: string;
-  status: string;
-  mode: "EXTERNAL" | "INTERNAL";
-  driver?: { id: number; name: string } | null;
-  zone?: { id: number; name: string } | null;
-};
-
-type Driver = { id: number; name: string; email: string };
-type Zone = { id: number; name: string; isActive: boolean };
+import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { useApi, useApiQuery } from "@/lib/use-api";
 
 const LIVREUR_STATUSES: StatusKey[] = [
   "A_ENLEVER",
@@ -31,212 +37,226 @@ const LIVREUR_STATUSES: StatusKey[] = [
   "RETOUR_DEPOT",
 ];
 
-export function DispatchManager({
-  staffMode = false,
-}: {
-  staffMode?: boolean;
-}) {
+const ACTIVE_STATUSES = ["A_ENLEVER", "ENLEVES", "AU_DEPOT", "EN_COURS", "A_VERIFIER"];
+
+type Filter = "ALL" | "UNASSIGNED" | "ACTIVE";
+
+const selectClass = cn(inputClass, "h-8 w-auto py-1 text-xs");
+
+export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) {
   const { session } = useAuth();
   const showModes = canSeeDeliveryMode(session?.user.role);
-  const [parcels, setParcels] = useState<ParcelRow[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const request = useApi();
+  const toast = useToast();
+  const parcelsQuery = useApiQuery<Parcel[]>("/parcels");
+  const driversQuery = useApiQuery<Driver[]>(staffMode ? "/users/livreurs" : null);
+  const zonesQuery = useApiQuery<Zone[]>(staffMode ? "/zones" : null);
   const [syncing, setSyncing] = useState(false);
   const [byPlaces, setByPlaces] = useState(false);
+  const [filter, setFilter] = useState<Filter>("ALL");
+  const [query, setQuery] = useState("");
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  async function load() {
-    if (!session?.accessToken) return;
-    const cols = await apiFetch<ParcelRow[]>("/parcels", {
-      token: session.accessToken,
+  const parcels = useMemo(() => parcelsQuery.data ?? [], [parcelsQuery.data]);
+  const drivers = driversQuery.data ?? [];
+  const activeZones = (zonesQuery.data ?? []).filter((z) => z.isActive);
+
+  const stats = useMemo(
+    () => ({
+      unassigned: parcels.filter((p) => p.mode === "INTERNAL" && !p.driver).length,
+      active: parcels.filter((p) => ACTIVE_STATUSES.includes(p.status)).length,
+      delivered: parcels.filter((p) => p.status === "LIVRES" || p.status === "LIVRES_PAYES").length,
+    }),
+    [parcels],
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return parcels.filter((p) => {
+      if (filter === "UNASSIGNED" && (p.mode !== "INTERNAL" || p.driver)) return false;
+      if (filter === "ACTIVE" && !ACTIVE_STATUSES.includes(p.status)) return false;
+      if (!q) return true;
+      return [p.code, p.recipientName, p.city, p.governorate, p.driver?.name]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
     });
-    setParcels(
-      cols.map((p) => ({
-        ...p,
-        governorate: p.governorate ?? p.city,
-      })),
-    );
-    if (staffMode) {
-      const [livs, zs] = await Promise.all([
-        apiFetch<Driver[]>("/users/livreurs", { token: session.accessToken }),
-        apiFetch<Zone[]>("/zones", { token: session.accessToken }),
-      ]);
-      setDrivers(livs);
-      setZones(zs.filter((z) => z.isActive));
+  }, [parcels, filter, query]);
+
+  const statusOptions = staffMode ? (Object.keys(STATUS_META) as StatusKey[]) : LIVREUR_STATUSES;
+
+  async function assign(parcel: Parcel, driverId: number) {
+    setBusyId(parcel.id);
+    try {
+      await request(`/parcels/${parcel.id}/assign`, "PATCH", { driverId });
+      const driver = drivers.find((d) => d.id === driverId);
+      toast.success(`${parcel.code ?? `#${parcel.id}`} assigné`, driver?.name);
+      await parcelsQuery.reload();
+    } catch (err) {
+      toast.error("Assignation impossible", errorText(err));
+    } finally {
+      setBusyId(null);
     }
   }
 
-  useEffect(() => {
-    load().catch((e: Error) => setMessage(e.message));
-  }, [session]);
-
-  async function assign(parcelId: number, driverId: number) {
-    if (!session?.accessToken) return;
-    await apiFetch(`/parcels/${parcelId}/assign`, {
-      method: "PATCH",
-      token: session.accessToken,
-      body: JSON.stringify({ driverId }),
-    });
-    setMessage(`Colis #${parcelId} assigné`);
-    await load();
-  }
-
-  async function assignPlace(items: ParcelRow[], driverId: number) {
-    if (!session?.accessToken || !driverId) return;
+  async function assignPlace(items: Parcel[], driverId: number) {
     const internal = items.filter((p) => p.mode === "INTERNAL");
-    for (const p of internal) {
-      await apiFetch(`/parcels/${p.id}/assign`, {
-        method: "PATCH",
-        token: session.accessToken,
-        body: JSON.stringify({ driverId }),
-      });
+    if (internal.length === 0) {
+      toast.info("Aucun colis INTERNAL à assigner dans ce lieu");
+      return;
     }
-    setMessage(
-      `${internal.length} colis du lieu assignés au livreur #${driverId}`,
-    );
-    await load();
+    try {
+      await Promise.all(
+        internal.map((p) => request(`/parcels/${p.id}/assign`, "PATCH", { driverId })),
+      );
+      const driver = drivers.find((d) => d.id === driverId);
+      toast.success(`${internal.length} colis assignés`, driver?.name);
+      await parcelsQuery.reload();
+    } catch (err) {
+      toast.error("Assignation partielle", errorText(err));
+      await parcelsQuery.reload();
+    }
   }
 
-  async function setStatus(parcelId: number, status: string) {
-    if (!session?.accessToken) return;
-    await apiFetch(`/parcels/${parcelId}/status`, {
-      method: "PATCH",
-      token: session.accessToken,
-      body: JSON.stringify({ status }),
-    });
-    setMessage(`Statut mis à jour`);
-    await load();
+  async function setStatus(parcel: Parcel, status: string) {
+    setBusyId(parcel.id);
+    try {
+      await request(`/parcels/${parcel.id}/status`, "PATCH", { status });
+      toast.success(
+        `${parcel.code ?? `#${parcel.id}`} → ${STATUS_META[status as StatusKey]?.label ?? status}`,
+      );
+      await parcelsQuery.reload();
+    } catch (err) {
+      toast.error("Statut non modifié", errorText(err));
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function syncExternal() {
-    if (!session?.accessToken) return;
     setSyncing(true);
     try {
-      const res = await apiFetch<{ checked: number; updated: number }>(
+      const res = await request<{ checked: number; updated: number; enabled?: boolean }>(
         "/parcels/sync-external",
-        { method: "POST", token: session.accessToken },
+        "POST",
       );
-      setMessage(`Sync Navex: ${res.updated}/${res.checked} mis à jour`);
-      await load();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Sync failed");
+      if (res.enabled === false) {
+        toast.info(
+          "Synchronisation Navex désactivée",
+          `${res.checked} colis réseau. Activez NAVEX_ENABLED avec une clé API pour synchroniser.`,
+        );
+      } else {
+        toast.success("Synchronisation terminée", `${res.updated}/${res.checked} colis mis à jour`);
+        await parcelsQuery.reload();
+      }
+    } catch (err) {
+      toast.error("Synchronisation impossible", errorText(err));
     } finally {
       setSyncing(false);
     }
   }
 
-  const internal = parcels.filter((p) => p.mode === "INTERNAL");
-  const placeReady = useMemo(
-    () =>
-      parcels.map((p) => ({
-        ...p,
-        governorate: p.governorate ?? "Tunisie",
-      })),
-    [parcels],
-  );
-
-  function rowControls(p: ParcelRow) {
+  function driverSelect(p: Parcel, className?: string) {
+    if (p.mode !== "INTERNAL") {
+      return <span className="text-xs text-ink-muted">{showModes ? "EXTERNAL" : "Réseau partenaire"}</span>;
+    }
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        {staffMode && p.mode === "INTERNAL" ? (
-          <select
-            className="rounded-lg border border-cream px-2 py-1.5 text-xs"
-            defaultValue=""
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              if (id)
-                assign(p.id, id).catch((err: Error) => setMessage(err.message));
-            }}
-          >
-            <option value="">Livreur…</option>
-            {drivers.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
+      <select
+        aria-label={`Livreur pour ${p.code ?? p.id}`}
+        className={cn(selectClass, className)}
+        value={p.driver?.id ?? ""}
+        disabled={busyId === p.id}
+        onChange={(e) => {
+          const id = Number(e.target.value);
+          if (id) void assign(p, id);
+        }}
+      >
+        <option value="">Assigner…</option>
+        {drivers.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  function statusSelect(p: Parcel) {
+    return (
+      <select
+        aria-label={`Statut de ${p.code ?? p.id}`}
+        className={selectClass}
+        value={p.status}
+        disabled={busyId === p.id}
+        onChange={(e) => void setStatus(p, e.target.value)}
+      >
+        {!statusOptions.includes(p.status as StatusKey) ? (
+          <option value={p.status}>{STATUS_META[p.status as StatusKey]?.label ?? p.status}</option>
         ) : null}
-        <select
-          className="rounded-lg border border-cream px-2 py-1.5 text-xs"
-          value={p.status}
-          onChange={(e) =>
-            setStatus(p.id, e.target.value).catch((err: Error) =>
-              setMessage(err.message),
-            )
-          }
-        >
-          {(staffMode
-            ? (Object.keys(STATUS_META) as StatusKey[])
-            : LIVREUR_STATUSES
-          ).map((s) => (
-            <option key={s} value={s}>
-              {STATUS_META[s].label}
-            </option>
-          ))}
-        </select>
-      </div>
+        {statusOptions.map((s) => (
+          <option key={s} value={s}>
+            {STATUS_META[s].label}
+          </option>
+        ))}
+      </select>
     );
   }
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold text-ink">
-            {staffMode ? "Dispatch" : "Mes tournées"}
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            {staffMode
-              ? showModes
-                ? "Assigner par lieux · sync EXTERNAL · statuts"
-                : "Assigner par lieux · sync Navex · statuts"
-              : "Mettre à jour le statut de vos colis"}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setByPlaces((v) => !v)}
-            className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${
-              byPlaces
-                ? "border border-cream bg-surface text-ink"
-                : "bg-brand text-white hover:bg-brand-soft"
-            }`}
-          >
-            {byPlaces ? "📋 Table" : "📍 Par lieux"}
-          </button>
-          {staffMode ? (
-            <button
-              type="button"
-              disabled={syncing}
-              onClick={() => syncExternal().catch(() => undefined)}
-              className="rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+    <div className="space-y-6">
+      <PageHeader
+        title={staffMode ? "Dispatch" : "Mes colis"}
+        description={
+          staffMode
+            ? "Assignez les livreurs par colis ou par lieu, et suivez les statuts"
+            : "Mettez à jour le statut de vos colis assignés"
+        }
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              icon={byPlaces ? LayoutList : MapPinned}
+              onClick={() => setByPlaces((v) => !v)}
             >
-              {syncing ? "Sync…" : showModes ? "Sync Navex EXTERNAL" : "Sync Navex"}
-            </button>
-          ) : null}
-        </div>
-      </header>
+              {byPlaces ? "Vue tableau" : "Vue par lieux"}
+            </Button>
+            {staffMode ? (
+              <Button variant="gold" icon={RefreshCw} loading={syncing} onClick={() => void syncExternal()}>
+                Sync Navex
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
-      {message ? <p className="text-sm font-medium text-gold">{message}</p> : null}
+      {parcelsQuery.error ? (
+        <ErrorBanner message={parcelsQuery.error} onRetry={() => void parcelsQuery.reload()} />
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {staffMode ? (
+          <StatCard label="À assigner" value={stats.unassigned} hint="Colis INTERNAL sans livreur" icon={Truck} tone="brand" />
+        ) : null}
+        <StatCard label="En circulation" value={stats.active} icon={MapPinned} tone="gold" />
+        <StatCard label="Livrés" value={stats.delivered} tone="success" />
+      </div>
 
       {byPlaces ? (
         <PlacesSmartView
-          items={placeReady}
+          items={visible}
           title="Dispatch par lieux"
-          description="Assignez un livreur à tout un quartier / ville d’un clic"
+          description="Assignez un livreur à tout un quartier ou une ville d’un clic"
           renderPlaceActions={
             staffMode
               ? (_label, items) => (
                   <select
-                    className="rounded-lg border-0 bg-white/95 px-2 py-1.5 text-xs font-semibold text-ink"
+                    aria-label="Assigner tout le lieu"
+                    className="rounded-lg border-0 bg-white/95 px-2 py-1.5 text-xs font-semibold text-[#1A1414]"
                     defaultValue=""
                     onChange={(e) => {
                       const id = Number(e.target.value);
-                      if (id)
-                        assignPlace(items, id).catch((err: Error) =>
-                          setMessage(err.message),
-                        );
+                      if (id) void assignPlace(items, id);
+                      e.target.value = "";
                     }}
                   >
                     <option value="">Assigner le lieu…</option>
@@ -251,120 +271,93 @@ export function DispatchManager({
           }
           renderItem={(p) => (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cream bg-surface px-4 py-3">
-              <div>
-                <p className="font-semibold text-ink">{p.code}</p>
-                <p className="text-sm text-ink-muted">
-                  {p.recipientName} ·{" "}
-                  {STATUS_META[p.status as StatusKey]?.label ?? p.status}
-                </p>
-                {p.driver ? (
-                  <p className="text-xs text-brand">Livreur: {p.driver.name}</p>
-                ) : null}
+              <div className="min-w-0">
+                <p className="font-mono text-xs font-semibold text-brand">{p.code}</p>
+                <p className="font-semibold text-ink">{p.recipientName}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={p.status} />
+                  {p.driver ? <span className="text-xs text-ink-muted">{p.driver.name}</span> : null}
+                </div>
               </div>
-              {rowControls(p)}
+              <div className="flex flex-wrap items-center gap-2">
+                {staffMode ? driverSelect(p) : null}
+                {statusSelect(p)}
+              </div>
             </div>
           )}
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-cream bg-surface shadow-soft">
-          <table className="min-w-full text-sm">
-            <thead className="bg-cream-soft/70 text-left text-[11px] uppercase tracking-wide text-ink-muted">
-              <tr>
-                <th className="px-4 py-3">Code</th>
-                <th className="px-4 py-3">Destinataire</th>
-                <th className="px-4 py-3">Statut</th>
-                {staffMode ? <th className="px-4 py-3">Assigner</th> : null}
-                <th className="px-4 py-3">Statut →</th>
-              </tr>
-            </thead>
-            <tbody>
-              {parcels.map((p) => (
-                <tr key={p.id} className="border-t border-cream-soft">
-                  <td className="px-4 py-3">
-                    <p className="font-semibold">{p.code}</p>
-                    {showModes ? (
-                      <p className="text-[11px] text-ink-muted">{p.mode}</p>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{p.recipientName}</p>
-                    <p className="text-xs text-ink-muted">{p.city}</p>
-                    {p.driver ? (
-                      <p className="text-xs text-gold">Livreur: {p.driver.name}</p>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3">
-                    {STATUS_META[p.status as StatusKey]?.label ?? p.status}
-                  </td>
-                  {staffMode ? (
-                    <td className="px-4 py-3">
-                      {p.mode === "INTERNAL" ? (
-                        <select
-                          className="rounded-lg border border-cream-soft px-2 py-1.5 text-xs"
-                          defaultValue=""
-                          onChange={(e) => {
-                            const id = Number(e.target.value);
-                            if (id)
-                              assign(p.id, id).catch((err: Error) =>
-                                setMessage(err.message),
-                              );
-                          }}
-                        >
-                          <option value="">Livreur…</option>
-                          {drivers.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-xs text-ink-muted">
-                          {showModes ? "EXTERNAL" : "Réseau"}
-                        </span>
-                      )}
-                    </td>
-                  ) : null}
-                  <td className="px-4 py-3">
-                    <select
-                      className="rounded-lg border border-cream-soft px-2 py-1.5 text-xs"
-                      value={p.status}
-                      onChange={(e) =>
-                        setStatus(p.id, e.target.value).catch((err: Error) =>
-                          setMessage(err.message),
-                        )
-                      }
-                    >
-                      {(staffMode
-                        ? (Object.keys(STATUS_META) as StatusKey[])
-                        : LIVREUR_STATUSES
-                      ).map((s) => (
-                        <option key={s} value={s}>
-                          {STATUS_META[s].label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
+        <TableCard
+          toolbar={
+            <>
+              <SegmentedTabs<Filter>
+                label="Filtrer le dispatch"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "ALL", label: "Tous", count: parcels.length },
+                  ...(staffMode
+                    ? [{ value: "UNASSIGNED" as const, label: "À assigner", count: stats.unassigned }]
+                    : []),
+                  { value: "ACTIVE", label: "En circulation", count: stats.active },
+                ]}
+              />
+              <SearchInput value={query} onChange={setQuery} placeholder="Code, ville, livreur…" className="w-full md:w-64" />
+            </>
+          }
+        >
+          {parcelsQuery.loading && parcels.length === 0 ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
               ))}
-              {parcels.length === 0 ? (
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="p-6">
+              <EmptyState icon={Truck} title="Aucun colis" description="Rien à dispatcher pour ce filtre." />
+            </div>
+          ) : (
+            <table className={tableClass}>
+              <thead className={theadClass}>
                 <tr>
-                  <td
-                    colSpan={staffMode ? 5 : 4}
-                    className="px-4 py-8 text-center text-ink-muted"
-                  >
-                    Aucun colis
-                  </td>
+                  <th className={thClass}>Colis</th>
+                  <th className={thClass}>Destinataire</th>
+                  <th className={thClass}>Statut</th>
+                  {staffMode ? <th className={thClass}>Livreur</th> : null}
+                  <th className={thClass}>Changer le statut</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {visible.map((p) => (
+                  <tr key={p.id} className={trClass}>
+                    <td className={tdClass}>
+                      <p className="font-mono text-xs font-semibold text-ink">{p.code}</p>
+                      {showModes ? (
+                        <p className="text-[10px] font-semibold uppercase text-ink-muted">{p.mode}</p>
+                      ) : null}
+                    </td>
+                    <td className={tdClass}>
+                      <p className="font-medium text-ink">{p.recipientName}</p>
+                      <p className="text-xs text-ink-muted">
+                        {p.city}, {p.governorate}
+                      </p>
+                    </td>
+                    <td className={tdClass}>
+                      <StatusBadge status={p.status} />
+                    </td>
+                    {staffMode ? <td className={tdClass}>{driverSelect(p)}</td> : null}
+                    <td className={tdClass}>{statusSelect(p)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </TableCard>
       )}
 
-      {staffMode && zones.length > 0 ? (
+      {staffMode && activeZones.length > 0 ? (
         <p className="text-xs text-ink-muted">
-          Zones actives: {zones.map((z) => z.name).join(", ")}
-          {showModes ? ` · ${internal.length} colis INTERNAL` : ""}
+          Zones actives : {activeZones.map((z) => z.name).join(", ")}
         </p>
       ) : null}
     </div>

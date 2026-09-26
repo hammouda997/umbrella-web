@@ -45,7 +45,7 @@ export function normalizeSearch(value: string): string {
   return foldAccents(value)
     .toLowerCase()
     .replace(/[_'’`]/g, " ")
-    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/[^a-z0-9\u0600-\u06FF\s-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

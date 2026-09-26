@@ -20,12 +20,18 @@ import {
 } from "@/lib/geolocation";
 import {
   reverseGeocodeTunisia,
+  searchPhotonInPlace,
   searchPlacesCombined,
   type AddressSuggestion,
 } from "@/lib/location-search";
 import { bilingualLabel } from "@/lib/place-labels-ar";
 import { displayGovernorate } from "@/lib/normalize-text";
-import { governoratesWithCities } from "@/lib/tunisia-address";
+import {
+  citiesForGovernorate,
+  governoratesWithCities,
+  resolveOfficialCity,
+} from "@/lib/tunisia-address";
+import { localitiesForCity } from "@/lib/tunisia-localities";
 
 export type AddressLocationValue = {
   governorate: string;
@@ -83,22 +89,25 @@ export function AddressLocationFields({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showMap, setShowMap] = useState(false);
+  const [cityQuery, setCityQuery] = useState("");
+  const [localityQuery, setLocalityQuery] = useState("");
+  const [remoteCities, setRemoteCities] = useState<string[]>([]);
+  const [remoteLocalities, setRemoteLocalities] = useState<string[]>([]);
 
   const quality = useMemo(() => scoreAddress(value), [value]);
 
   const cityOptions = useMemo(
-    () => (value.governorate ? governoratesWithCities[value.governorate] ?? [] : []),
+    () => (value.governorate ? citiesForGovernorate(value.governorate) : []),
     [value.governorate],
   );
 
-  const localityOptions = useMemo(() => {
-    if (!value.governorate) return [];
-    const cities = governoratesWithCities[value.governorate] ?? [];
-    if (!value.city) return cities;
-    return cities.filter(
-      (c) => c.toLowerCase() !== value.city.toLowerCase(),
-    );
-  }, [value.governorate, value.city]);
+  const localityOptions = useMemo(
+    () =>
+      value.governorate
+        ? localitiesForCity(value.governorate, value.city)
+        : [],
+    [value.governorate, value.city],
+  );
 
   useEffect(() => {
     void queryGeoPermission().then(setPermission);
@@ -149,11 +158,63 @@ export function AddressLocationFields({
     };
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!value.governorate || cityQuery.trim().length < 2) {
+      setRemoteCities([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void searchPhotonInPlace(
+        cityQuery,
+        value.governorate,
+        undefined,
+        controller.signal,
+      )
+        .then((names) => {
+          if (!controller.signal.aborted) setRemoteCities(names);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setRemoteCities([]);
+        });
+    }, 280);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [cityQuery, value.governorate]);
+
+  useEffect(() => {
+    if (!value.governorate || !value.city || localityQuery.trim().length < 2) {
+      setRemoteLocalities([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void searchPhotonInPlace(
+        localityQuery,
+        value.governorate,
+        value.city,
+        controller.signal,
+      )
+        .then((names) => {
+          if (!controller.signal.aborted) setRemoteLocalities(names);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setRemoteLocalities([]);
+        });
+    }, 280);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [localityQuery, value.governorate, value.city]);
+
   const applySuggestion = useCallback(
     (hit: AddressSuggestion) => {
       onChange({
         governorate: hit.governorate,
-        city: hit.city,
+        city: resolveOfficialCity(hit.governorate, hit.city) ?? hit.city,
         locality: hit.locality ?? "",
         address: hit.street ?? value.address,
         lat: hit.lat ?? null,
@@ -461,19 +522,22 @@ export function AddressLocationFields({
           name="city"
           value={value.city}
           options={cityOptions}
+          extraOptions={remoteCities}
+          onQueryChange={setCityQuery}
           onChange={(city) =>
             onChange({
               ...value,
-              city,
+              city:
+                resolveOfficialCity(value.governorate, city) ?? city,
               locality: "",
             })
           }
           disabled={!value.governorate}
           required={required}
-          allowCustom={false}
+          allowCustom
           bilingual
           governorateKey={value.governorate}
-          placeholder="Rechercher une ville"
+          placeholder="Délégation — tapez pour filtrer"
         />
         <div className={compact ? undefined : "sm:col-span-2"}>
           <AutocompleteField
@@ -481,12 +545,18 @@ export function AddressLocationFields({
             name="locality"
             value={value.locality}
             options={localityOptions}
+            extraOptions={remoteLocalities}
+            onQueryChange={setLocalityQuery}
             onChange={(locality) => onChange({ ...value, locality })}
-            disabled={!value.governorate}
+            disabled={!value.governorate || !value.city}
             allowCustom
             bilingual
             governorateKey={value.governorate}
-            placeholder="Rechercher une localité"
+            placeholder={
+              value.city
+                ? "Quartier, village — liste + recherche"
+                : "Choisir une ville d’abord"
+            }
           />
         </div>
         {showStreet ? (

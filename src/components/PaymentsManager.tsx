@@ -1,25 +1,53 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { useMemo, useState } from "react";
+import { Banknote, CheckCircle2, Clock3, HandCoins, Wallet, XCircle } from "lucide-react";
+import { errorText, useConfirm, useToast } from "@/components/Feedback";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorBanner,
+  PageHeader,
+  Panel,
+  SegmentedTabs,
+  StatCard,
+  StatusBadge,
+  TableCard,
+  tableClass,
+  tdClass,
+  theadClass,
+  thClass,
+  trClass,
+  type BadgeTone,
+} from "@/components/ui";
+import {
+  formatTnd,
+  toAmount,
+  type Parcel,
+  type Payment,
+  type PaymentStatus,
+} from "@/lib/domain";
+import { useApi, useApiQuery } from "@/lib/use-api";
 
-type Parcel = {
-  id: number;
-  code: string | null;
-  price: string | number;
-  status: string;
+const STATUS_LABEL: Record<PaymentStatus, string> = {
+  EN_DEMANDE: "En demande",
+  APPROUVE: "Approuvé",
+  PAYE: "Payé",
+  REJETE: "Rejeté",
 };
 
-type Payment = {
-  id: number;
-  amount: string | number;
-  status: "EN_DEMANDE" | "APPROUVE" | "PAYE" | "REJETE";
-  note: string | null;
-  createdAt: string;
-  sender?: { name: string; email: string };
-  items: Array<{ parcel: { id: number; code: string | null }; amount: string | number }>;
+const STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
+  EN_DEMANDE: "warning",
+  APPROUVE: "info",
+  PAYE: "success",
+  REJETE: "danger",
 };
+
+const ACTIVE: PaymentStatus[] = ["EN_DEMANDE", "APPROUVE", "PAYE"];
+const DELIVERED = ["LIVRES", "LIVRES_PAYES"];
+
+type Filter = "ALL" | PaymentStatus;
 
 export function PaymentsManager({
   canCreate = true,
@@ -28,174 +56,336 @@ export function PaymentsManager({
   canCreate?: boolean;
   canModerate?: boolean;
 }) {
-  const { session } = useAuth();
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [parcels, setParcels] = useState<Parcel[]>([]);
+  const request = useApi();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const payments = useApiQuery<Payment[]>("/payments");
+  const parcels = useApiQuery<Parcel[]>(canCreate ? "/parcels" : null);
   const [selected, setSelected] = useState<number[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("ALL");
+  const [submitting, setSubmitting] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  const eligible = useMemo(
-    () => parcels.filter((p) => p.status === "LIVRES" || p.status === "LIVRES_PAYES"),
-    [parcels],
+  const paymentList = useMemo(() => payments.data ?? [], [payments.data]);
+
+  const eligible = useMemo(() => {
+    const requested = new Set(
+      paymentList
+        .filter((p) => ACTIVE.includes(p.status))
+        .flatMap((p) => p.items.map((i) => i.parcel.id)),
+    );
+    return (parcels.data ?? []).filter(
+      (p) => DELIVERED.includes(p.status) && !requested.has(p.id),
+    );
+  }, [parcels.data, paymentList]);
+
+  const totals = useMemo(() => {
+    const sum = (status: PaymentStatus) =>
+      paymentList
+        .filter((p) => p.status === status)
+        .reduce((s, p) => s + toAmount(p.amount), 0);
+    return {
+      enDemande: sum("EN_DEMANDE"),
+      approuve: sum("APPROUVE"),
+      paye: sum("PAYE"),
+      eligible: eligible.reduce((s, p) => s + toAmount(p.price), 0),
+    };
+  }, [paymentList, eligible]);
+
+  const selectedTotal = useMemo(
+    () =>
+      eligible
+        .filter((p) => selected.includes(p.id))
+        .reduce((s, p) => s + toAmount(p.price), 0),
+    [eligible, selected],
   );
 
-  async function load() {
-    if (!session?.accessToken) return;
-    const [pay, cols] = await Promise.all([
-      apiFetch<Payment[]>("/payments", { token: session.accessToken }),
-      apiFetch<Parcel[]>("/parcels", { token: session.accessToken }),
-    ]);
-    setPayments(pay);
-    setParcels(cols);
-  }
+  const visible = useMemo(
+    () => paymentList.filter((p) => filter === "ALL" || p.status === filter),
+    [paymentList, filter],
+  );
 
-  useEffect(() => {
-    load().catch((e: Error) => setMessage(e.message));
-  }, [session]);
-
-  async function onCreate(e: FormEvent) {
-    e.preventDefault();
-    if (!session?.accessToken || selected.length === 0) {
-      setMessage("Sélectionnez au moins un colis livré");
-      return;
-    }
-    await apiFetch("/payments", {
-      method: "POST",
-      token: session.accessToken,
-      body: JSON.stringify({ parcelIds: selected }),
-    });
-    setSelected([]);
-    setMessage("Demande de paiement créée");
-    await load();
-  }
-
-  async function setStatus(id: number, status: Payment["status"]) {
-    if (!session?.accessToken) return;
-    await apiFetch(`/payments/${id}/status`, {
-      method: "PATCH",
-      token: session.accessToken,
-      body: JSON.stringify({ status }),
-    });
-    setMessage(`Paiement #${id} → ${status}`);
-    await load();
-  }
+  const allSelected = eligible.length > 0 && selected.length === eligible.length;
 
   function toggle(id: number) {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
+  async function reloadAll() {
+    await Promise.all([payments.reload(), parcels.reload()]);
+  }
+
+  async function onRequest() {
+    if (selected.length === 0) {
+      toast.error("Sélectionnez au moins un colis livré");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const created = await request<Payment>("/payments", "POST", { parcelIds: selected });
+      setSelected([]);
+      toast.success("Demande envoyée", `#${created.id} · ${formatTnd(created.amount)}`);
+      await reloadAll();
+    } catch (err) {
+      toast.error("Demande impossible", errorText(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function setStatus(payment: Payment, status: PaymentStatus) {
+    if (status === "REJETE") {
+      const ok = await confirm({
+        title: `Rejeter la demande #${payment.id} ?`,
+        description: `${formatTnd(payment.amount)} · ${payment.sender?.name ?? "Expéditeur"}`,
+        confirmLabel: "Rejeter",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    setBusyId(payment.id);
+    try {
+      await request(`/payments/${payment.id}/status`, "PATCH", { status });
+      toast.success(`Paiement #${payment.id} : ${STATUS_LABEL[status].toLowerCase()}`);
+      await reloadAll();
+    } catch (err) {
+      toast.error("Mise à jour impossible", errorText(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const loadError = payments.error ?? parcels.error;
+
   return (
-    <div className="space-y-5">
-      <header>
-        <h1 className="font-display text-3xl font-extrabold text-ink">
-          Demandes de paiement
-        </h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Colis livrés → remboursement / règlement
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        title="Paiements"
+        description={
+          canModerate
+            ? "Validez et versez les montants COD aux expéditeurs"
+            : "Demandez le versement de vos colis livrés"
+        }
+      />
+
+      {loadError ? <ErrorBanner message={loadError} onRetry={() => void reloadAll()} /> : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {canCreate ? (
+          <StatCard
+            label="Disponible"
+            value={formatTnd(totals.eligible)}
+            hint={`${eligible.length} colis livré(s) à réclamer`}
+            icon={HandCoins}
+            tone="success"
+          />
+        ) : null}
+        <StatCard label="En demande" value={formatTnd(totals.enDemande)} icon={Clock3} tone="gold" />
+        <StatCard label="Approuvé" value={formatTnd(totals.approuve)} icon={Wallet} tone="brand" />
+        <StatCard label="Versé" value={formatTnd(totals.paye)} icon={Banknote} />
+      </div>
 
       {canCreate ? (
-        <form
-          onSubmit={onCreate}
-          className="space-y-3 rounded-xl border border-cream bg-surface p-5 shadow-soft"
-        >
-          <p className="text-sm font-medium text-ink">
-            Colis éligibles ({eligible.length})
-          </p>
-          <div className="max-h-48 space-y-2 overflow-y-auto">
-            {eligible.map((p) => (
-              <label
-                key={p.id}
-                className="flex items-center gap-3 rounded-lg border border-cream-soft px-3 py-2 text-sm"
-              >
+        <Panel className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-bold text-ink">Nouvelle demande</h2>
+              <p className="text-sm text-ink-muted">
+                Colis livrés non encore inclus dans une demande
+              </p>
+            </div>
+            {eligible.length > 0 ? (
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
-                  checked={selected.includes(p.id)}
-                  onChange={() => toggle(p.id)}
+                  className="h-4 w-4 accent-brand"
+                  checked={allSelected}
+                  onChange={() => setSelected(allSelected ? [] : eligible.map((p) => p.id))}
                 />
-                <span className="font-semibold">{p.code ?? `#${p.id}`}</span>
-                <span className="text-ink-muted">{p.price} DT</span>
+                Tout sélectionner
               </label>
-            ))}
-            {eligible.length === 0 ? (
-              <p className="text-sm text-ink-muted">Aucun colis livré</p>
             ) : null}
           </div>
-          <button
-            type="submit"
-            className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft"
-          >
-            Demander le paiement
-          </button>
-        </form>
+
+          {eligible.length === 0 ? (
+            <p className="rounded-xl bg-cream-soft/40 px-4 py-6 text-center text-sm text-ink-muted">
+              {parcels.loading ? "Chargement…" : "Aucun colis livré à réclamer pour le moment."}
+            </p>
+          ) : (
+            <ul className="grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2">
+              {eligible.map((p) => {
+                const checked = selected.includes(p.id);
+                return (
+                  <li key={p.id}>
+                    <label
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
+                        checked ? "border-brand bg-brand/5" : "border-cream hover:border-brand/40"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-brand"
+                        checked={checked}
+                        onChange={() => toggle(p.id)}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-mono text-xs font-semibold text-ink">
+                          {p.code ?? `#${p.id}`}
+                        </span>
+                        <span className="block truncate text-xs text-ink-muted">
+                          {p.recipientName} · {p.city}
+                        </span>
+                      </span>
+                      <span className="font-semibold text-ink">{formatTnd(p.price)}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div className="flex flex-col gap-3 border-t border-cream pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-ink-muted">
+              {selected.length} colis · <span className="font-bold text-ink">{formatTnd(selectedTotal)}</span>
+            </p>
+            <Button
+              icon={HandCoins}
+              loading={submitting}
+              disabled={selected.length === 0}
+              onClick={() => void onRequest()}
+            >
+              Demander le paiement
+            </Button>
+          </div>
+        </Panel>
       ) : null}
 
-      {message ? <p className="text-sm font-medium text-gold">{message}</p> : null}
-
-      <div className="overflow-hidden rounded-xl border border-cream bg-surface shadow-soft">
-        <table className="min-w-full text-sm">
-          <thead className="bg-cream-soft/70 text-left text-[11px] uppercase tracking-wide text-ink-muted">
-            <tr>
-              <th className="px-4 py-3">#</th>
-              <th className="px-4 py-3">Montant</th>
-              <th className="px-4 py-3">Colis</th>
-              <th className="px-4 py-3">Statut</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map((p) => (
-              <tr key={p.id} className="border-t border-cream-soft">
-                <td className="px-4 py-3 font-semibold">{p.id}</td>
-                <td className="px-4 py-3">{p.amount} DT</td>
-                <td className="px-4 py-3 text-ink-muted">
-                  {p.items.map((i) => i.parcel.code ?? i.parcel.id).join(", ")}
-                </td>
-                <td className="px-4 py-3">{p.status}</td>
-                <td className="px-4 py-3">
-                  {canModerate && p.status === "EN_DEMANDE" ? (
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setStatus(p.id, "APPROUVE")}
-                        className="rounded-md bg-[#2f7d5b] px-2 py-1 text-xs font-semibold text-white"
-                      >
-                        Approuver
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setStatus(p.id, "REJETE")}
-                        className="rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white"
-                      >
-                        Rejeter
-                      </button>
-                    </div>
-                  ) : null}
-                  {canModerate && p.status === "APPROUVE" ? (
-                    <button
-                      type="button"
-                      onClick={() => setStatus(p.id, "PAYE")}
-                      className="rounded-md bg-gold px-2 py-1 text-xs font-semibold text-white"
-                    >
-                      Marquer payé
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
+      <TableCard
+        toolbar={
+          <SegmentedTabs<Filter>
+            label="Filtrer les demandes"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "ALL", label: "Toutes", count: paymentList.length },
+              ...(Object.keys(STATUS_LABEL) as PaymentStatus[]).map((s) => ({
+                value: s,
+                label: STATUS_LABEL[s],
+                count: paymentList.filter((p) => p.status === s).length,
+              })),
+            ]}
+          />
+        }
+      >
+        {payments.loading && paymentList.length === 0 ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
             ))}
-            {payments.length === 0 ? (
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="p-6">
+            <EmptyState icon={Wallet} title="Aucune demande" description="Les demandes de paiement apparaîtront ici." />
+          </div>
+        ) : (
+          <table className={tableClass}>
+            <thead className={theadClass}>
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">
-                  Aucune demande
-                </td>
+                <th className={thClass}>Demande</th>
+                {canModerate ? <th className={thClass}>Expéditeur</th> : null}
+                <th className={thClass}>Colis</th>
+                <th className={`${thClass} text-right`}>Montant</th>
+                <th className={thClass}>Statut</th>
+                {canModerate ? <th className={`${thClass} text-right`}>Actions</th> : null}
               </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {visible.map((p) => {
+                const busy = busyId === p.id;
+                return (
+                  <tr key={p.id} className={trClass}>
+                    <td className={tdClass}>
+                      <p className="font-semibold text-ink">#{p.id}</p>
+                      <p className="text-xs text-ink-muted">
+                        {new Date(p.createdAt).toLocaleDateString("fr-TN")}
+                        {p.note ? ` · ${p.note}` : ""}
+                      </p>
+                    </td>
+                    {canModerate ? (
+                      <td className={`${tdClass} text-ink`}>{p.sender?.name ?? "—"}</td>
+                    ) : null}
+                    <td className={tdClass}>
+                      <div className="flex flex-wrap gap-1">
+                        {p.items.map((i) => (
+                          <span
+                            key={`${p.id}-${i.parcel.id}`}
+                            className="rounded-md bg-cream-soft/60 px-1.5 py-0.5 font-mono text-[11px] text-ink"
+                          >
+                            {i.parcel.code ?? `#${i.parcel.id}`}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className={`${tdClass} whitespace-nowrap text-right font-bold text-ink`}>
+                      {formatTnd(p.amount)}
+                    </td>
+                    <td className={tdClass}>
+                      <Badge tone={STATUS_TONE[p.status]} dot>
+                        {STATUS_LABEL[p.status]}
+                      </Badge>
+                    </td>
+                    {canModerate ? (
+                      <td className={tdClass}>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {p.status === "EN_DEMANDE" ? (
+                            <Button
+                              size="sm"
+                              variant="success"
+                              icon={CheckCircle2}
+                              loading={busy}
+                              onClick={() => void setStatus(p, "APPROUVE")}
+                            >
+                              Approuver
+                            </Button>
+                          ) : null}
+                          {p.status === "APPROUVE" ? (
+                            <Button
+                              size="sm"
+                              variant="gold"
+                              icon={Banknote}
+                              loading={busy}
+                              onClick={() => void setStatus(p, "PAYE")}
+                            >
+                              Marquer payé
+                            </Button>
+                          ) : null}
+                          {p.status === "EN_DEMANDE" || p.status === "APPROUVE" ? (
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              icon={XCircle}
+                              disabled={busy}
+                              onClick={() => void setStatus(p, "REJETE")}
+                            >
+                              Rejeter
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+
+      {canCreate && eligible.length > 0 ? (
+        <p className="text-xs text-ink-muted">
+          Statuts éligibles : <StatusBadge status="LIVRES" /> <StatusBadge status="LIVRES_PAYES" />
+        </p>
+      ) : null}
     </div>
   );
 }

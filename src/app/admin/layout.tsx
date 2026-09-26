@@ -14,7 +14,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
-import { colisNavChildren } from "@/lib/portal-nav";
 import type { PortalNavSection } from "@/components/PortalShell";
 
 const sections: PortalNavSection[] = [
@@ -22,22 +21,11 @@ const sections: PortalNavSection[] = [
     title: "Ops",
     items: [
       { href: "/admin", label: "Tableau de bord", icon: LayoutDashboard },
-      { href: "/admin/analytics", label: "Analytics", icon: ChartColumn },
-      {
-        href: "/admin/parcels",
-        label: "Colis",
-        icon: Package,
-        defaultOpen: false,
-        children: [
-          { href: "/admin/parcels", label: "Tous les colis" },
-          ...colisNavChildren("/admin").filter((c) =>
-            c.href.includes("status="),
-          ),
-        ],
-      },
-      { href: "/admin/nouveau", label: "Ajouter colis", icon: PlusCircle },
+      { href: "/admin/parcels", label: "Colis", icon: Package },
+      { href: "/admin/nouveau", label: "Nouveau colis", icon: PlusCircle },
       { href: "/admin/dispatch", label: "Dispatch", icon: Truck },
       { href: "/admin/bordereau", label: "Bordereau", icon: Printer },
+      { href: "/admin/analytics", label: "Analytics", icon: ChartColumn },
     ],
   },
   {

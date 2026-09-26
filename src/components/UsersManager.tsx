@@ -1,138 +1,276 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { FormEvent, useMemo, useState } from "react";
+import { UserPlus, Users } from "lucide-react";
+import { errorText, useConfirm, useToast } from "@/components/Feedback";
+import { Modal } from "@/components/Modal";
+import {
+  Avatar,
+  Badge,
+  Button,
+  EmptyState,
+  ErrorBanner,
+  PageHeader,
+  SearchInput,
+  SegmentedTabs,
+  SelectField,
+  TableCard,
+  TextField,
+  tableClass,
+  tdClass,
+  theadClass,
+  thClass,
+  trClass,
+  type BadgeTone,
+} from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
-import type { AppRole } from "@/lib/roles";
-import { ROLE_LABEL } from "@/lib/roles";
-import { PageHeader } from "@/components/ui";
+import type { UserRow } from "@/lib/domain";
+import { ROLE_LABEL, type AppRole } from "@/lib/roles";
+import { useApi, useApiQuery } from "@/lib/use-api";
 
-type UserRow = {
-  id: number;
-  name: string;
-  email: string;
-  phone: string | null;
-  role: AppRole;
-  isActive: boolean;
-  createdAt: string;
+const CREATABLE_ROLES: AppRole[] = ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR", "CLIENT"];
+
+const ROLE_TONE: Record<AppRole, BadgeTone> = {
+  SUPER_ADMIN: "brand",
+  ADMIN: "gold",
+  EXPEDITEUR: "info",
+  LIVREUR: "success",
+  CLIENT: "neutral",
 };
 
-const CREATABLE_ROLES: AppRole[] = [
-  "SUPER_ADMIN",
-  "ADMIN",
-  "EXPEDITEUR",
-  "LIVREUR",
-  "CLIENT",
-];
+type RoleFilter = "ALL" | AppRole;
+type FormErrors = Partial<Record<"name" | "email" | "password" | "phone", string>>;
+
+function validate(form: FormData): FormErrors {
+  const errors: FormErrors = {};
+  const name = String(form.get("name") ?? "").trim();
+  const email = String(form.get("email") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+  const phone = String(form.get("phone") ?? "").trim();
+  if (name.length < 2) errors.name = "Nom trop court";
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors.email = "Email invalide";
+  if (password.length < 8) errors.password = "8 caractères minimum";
+  if (phone && !/^[0-9]{8}$/.test(phone)) errors.phone = "8 chiffres";
+  return errors;
+}
 
 export function UsersManager({ allowSuperAdmin = false }: { allowSuperAdmin?: boolean }) {
   const { session } = useAuth();
-  const [users, setUsers] = useState<UserRow[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const request = useApi();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { data, error, loading, reload } = useApiQuery<UserRow[]>("/users");
+  const users = useMemo(() => data ?? [], [data]);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("ALL");
+  const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [busyId, setBusyId] = useState<number | null>(null);
+
   const roles = allowSuperAdmin
     ? CREATABLE_ROLES
     : CREATABLE_ROLES.filter((r) => r !== "SUPER_ADMIN");
 
-  async function load() {
-    if (!session?.accessToken) return;
-    setUsers(await apiFetch<UserRow[]>("/users", { token: session.accessToken }));
-  }
-
-  useEffect(() => {
-    load().catch((e: Error) => setMessage(e.message));
-  }, [session]);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return users.filter(
+      (u) =>
+        (roleFilter === "ALL" || u.role === roleFilter) &&
+        (!q || [u.name, u.email, u.phone].join(" ").toLowerCase().includes(q)),
+    );
+  }, [users, roleFilter, query]);
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!session?.accessToken) return;
     const form = new FormData(e.currentTarget);
-    await apiFetch("/users", {
-      method: "POST",
-      token: session.accessToken,
-      body: JSON.stringify({
-        name: form.get("name"),
-        email: form.get("email"),
-        password: form.get("password"),
-        phone: form.get("phone") || undefined,
+    const nextErrors = validate(form);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+    setSaving(true);
+    try {
+      const user = await request<UserRow>("/users", "POST", {
+        name: String(form.get("name")).trim(),
+        email: String(form.get("email")).trim(),
+        password: String(form.get("password")),
+        phone: String(form.get("phone") ?? "").trim() || undefined,
         role: form.get("role"),
-      }),
-    });
-    e.currentTarget.reset();
-    setMessage("Utilisateur créé");
-    await load();
+      });
+      toast.success("Compte créé", `${user.name} · ${ROLE_LABEL[user.role]}`);
+      setCreating(false);
+      await reload();
+    } catch (err) {
+      toast.error("Création impossible", errorText(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function toggleActive(id: number, isActive: boolean) {
-    if (!session?.accessToken) return;
-    await apiFetch(`/users/${id}/active`, {
-      method: "PATCH",
-      token: session.accessToken,
-      body: JSON.stringify({ isActive: !isActive }),
-    });
-    await load();
+  async function toggleActive(user: UserRow) {
+    if (user.isActive) {
+      const ok = await confirm({
+        title: `Désactiver ${user.name} ?`,
+        description: "Ce compte ne pourra plus se connecter tant qu'il n'est pas réactivé.",
+        confirmLabel: "Désactiver",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    setBusyId(user.id);
+    try {
+      await request(`/users/${user.id}/active`, "PATCH", { isActive: !user.isActive });
+      toast.success(user.isActive ? "Compte désactivé" : "Compte réactivé", user.name);
+      await reload();
+    } catch (err) {
+      toast.error("Action impossible", errorText(err));
+    } finally {
+      setBusyId(null);
+    }
   }
+
+  const countFor = (role: AppRole) => users.filter((u) => u.role === role).length;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Utilisateurs"
-        description="Gestion des comptes et rôles portail"
+        description={`${users.length} compte(s) · ${users.filter((u) => !u.isActive).length} désactivé(s)`}
+        actions={
+          <Button
+            icon={UserPlus}
+            onClick={() => {
+              setErrors({});
+              setCreating(true);
+            }}
+          >
+            Nouvel utilisateur
+          </Button>
+        }
       />
 
-      <form
-        onSubmit={onCreate}
-        className="grid gap-3 rounded-2xl border border-cream bg-surface p-5 shadow-soft md:grid-cols-2"
+      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
+
+      <TableCard
+        toolbar={
+          <>
+            <SegmentedTabs<RoleFilter>
+              label="Filtrer par rôle"
+              value={roleFilter}
+              onChange={setRoleFilter}
+              options={[
+                { value: "ALL", label: "Tous", count: users.length },
+                ...roles.map((r) => ({ value: r, label: ROLE_LABEL[r], count: countFor(r) })),
+              ]}
+            />
+            <SearchInput value={query} onChange={setQuery} placeholder="Nom, email, téléphone…" className="w-full md:w-64" />
+          </>
+        }
       >
-        <input name="name" required placeholder="Nom" className="rounded-xl border border-cream-soft px-3 py-2" />
-        <input name="email" required type="email" placeholder="Email" className="rounded-xl border border-cream-soft px-3 py-2" />
-        <input name="password" required type="password" minLength={8} placeholder="Mot de passe" className="rounded-xl border border-cream-soft px-3 py-2" />
-        <input name="phone" placeholder="Téléphone" className="rounded-xl border border-cream-soft px-3 py-2" />
-        <select name="role" required className="rounded-xl border border-cream-soft px-3 py-2">
-          {roles.map((r) => (
-            <option key={r} value={r}>
-              {ROLE_LABEL[r]}
-            </option>
-          ))}
-        </select>
-        <button type="submit" className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white">
-          Créer
-        </button>
-      </form>
-
-      {message ? <p className="text-sm font-medium text-gold">{message}</p> : null}
-
-      <div className="overflow-hidden rounded-2xl border border-cream bg-surface shadow-soft">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-cream-soft/60 text-xs uppercase tracking-wide text-ink-muted">
-            <tr>
-              <th className="px-4 py-3">Nom</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Rôle</th>
-              <th className="px-4 py-3">Statut</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-t border-cream">
-                <td className="px-4 py-3 font-medium text-ink">{u.name}</td>
-                <td className="px-4 py-3 text-ink-muted">{u.email}</td>
-                <td className="px-4 py-3">{ROLE_LABEL[u.role]}</td>
-                <td className="px-4 py-3">{u.isActive ? "Actif" : "Inactif"}</td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => toggleActive(u.id, u.isActive)}
-                    className="text-xs font-semibold text-brand hover:underline"
-                  >
-                    {u.isActive ? "Désactiver" : "Activer"}
-                  </button>
-                </td>
-              </tr>
+        {loading && users.length === 0 ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="p-6">
+            <EmptyState icon={Users} title="Aucun utilisateur" description="Aucun compte ne correspond à ce filtre." />
+          </div>
+        ) : (
+          <table className={tableClass}>
+            <thead className={theadClass}>
+              <tr>
+                <th className={thClass}>Utilisateur</th>
+                <th className={`${thClass} hidden md:table-cell`}>Téléphone</th>
+                <th className={thClass}>Rôle</th>
+                <th className={thClass}>Statut</th>
+                <th className={`${thClass} text-right`}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((u) => {
+                const isSelf = u.id === session?.user.id;
+                return (
+                  <tr key={u.id} className={trClass}>
+                    <td className={tdClass}>
+                      <div className="flex items-center gap-3">
+                        <Avatar name={u.name} />
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-ink">
+                            {u.name}
+                            {isSelf ? <span className="ml-1.5 text-xs font-normal text-ink-muted">(vous)</span> : null}
+                          </p>
+                          <p className="truncate text-xs text-ink-muted">{u.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={`${tdClass} hidden text-ink-muted md:table-cell`}>{u.phone || "—"}</td>
+                    <td className={tdClass}>
+                      <Badge tone={ROLE_TONE[u.role]}>{ROLE_LABEL[u.role]}</Badge>
+                    </td>
+                    <td className={tdClass}>
+                      <Badge tone={u.isActive ? "success" : "neutral"} dot>
+                        {u.isActive ? "Actif" : "Désactivé"}
+                      </Badge>
+                    </td>
+                    <td className={`${tdClass} text-right`}>
+                      <Button
+                        size="sm"
+                        variant={u.isActive ? "secondary" : "success"}
+                        disabled={isSelf}
+                        loading={busyId === u.id}
+                        title={isSelf ? "Vous ne pouvez pas désactiver votre propre compte" : undefined}
+                        onClick={() => void toggleActive(u)}
+                      >
+                        {u.isActive ? "Désactiver" : "Activer"}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+
+      <Modal
+        open={creating}
+        onClose={() => setCreating(false)}
+        title="Nouvel utilisateur"
+        description="Le compte peut se connecter immédiatement avec ces identifiants."
+        size="md"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setCreating(false)}>
+              Annuler
+            </Button>
+            <Button type="submit" form="user-create-form" loading={saving}>
+              Créer le compte
+            </Button>
+          </div>
+        }
+      >
+        <form id="user-create-form" onSubmit={onCreate} noValidate className="grid gap-4 sm:grid-cols-2">
+          <TextField name="name" label="Nom complet" autoComplete="off" error={errors.name} wrapperClassName="sm:col-span-2" />
+          <TextField name="email" type="email" label="Email" autoComplete="off" error={errors.email} />
+          <TextField name="phone" label="Téléphone" inputMode="numeric" placeholder="8 chiffres" error={errors.phone} />
+          <TextField
+            name="password"
+            type="password"
+            label="Mot de passe"
+            autoComplete="new-password"
+            hint="8 caractères minimum"
+            error={errors.password}
+          />
+          <SelectField name="role" label="Rôle" defaultValue="EXPEDITEUR">
+            {roles.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABEL[r]}
+              </option>
+            ))}
+          </SelectField>
+        </form>
+      </Modal>
     </div>
   );
 }

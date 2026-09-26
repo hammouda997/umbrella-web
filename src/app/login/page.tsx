@@ -3,13 +3,22 @@
 import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LogIn } from "lucide-react";
+import { AuthLayout } from "@/components/AuthLayout";
+import { Button, ErrorBanner, TextField } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { PORTAL_BY_ROLE } from "@/lib/roles";
-import { USE_MOCK } from "@/lib/mock-mode";
-import { ThemeToggle } from "@/components/ThemeToggle";
+
+const DEMO_ACCOUNTS = [
+  { email: "admin@umbrella.tn", password: "Admin@12345", label: "Admin" },
+  { email: "expediteur@umbrella.tn", password: "Expediteur@12345", label: "Expéditeur" },
+  { email: "livreur@umbrella.tn", password: "Livreur@12345", label: "Livreur" },
+  { email: "client@umbrella.tn", password: "Client@12345", label: "Client" },
+  { email: "super@umbrella.tn", password: "Super@12345", label: "Super admin" },
+] as const;
 
 function LoginForm() {
-  const { signIn } = useAuth();
+  const { signIn, isMock } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -24,14 +33,8 @@ function LoginForm() {
     try {
       const session = await signIn(email, password);
       const next = searchParams.get("next");
-      const safeNext =
-        next && next.startsWith("/") && !next.startsWith("//") ? next : null;
-      const portal =
-        safeNext ??
-        session.portal ??
-        PORTAL_BY_ROLE[session.user.role] ??
-        "/login";
-      router.replace(portal);
+      const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+      router.replace(safeNext ?? session.portal ?? PORTAL_BY_ROLE[session.user.role]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible");
     } finally {
@@ -39,105 +42,77 @@ function LoginForm() {
     }
   }
 
-  function fillDemo(demoEmail: string, demoPassword: string) {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-  }
-
   return (
-    <form
-      onSubmit={onSubmit}
-      className="w-full max-w-md rounded-2xl border border-cream bg-surface/90 p-8 shadow-soft backdrop-blur"
+    <AuthLayout
+      title="Connexion"
+      subtitle={`Accédez à votre espace Umbrella Express${isMock ? " · mode démo" : ""}`}
+      footer={
+        <>
+          Pas encore de compte ?{" "}
+          <Link href="/signup" className="font-semibold text-brand hover:underline">
+            Créer un compte expéditeur
+          </Link>
+        </>
+      }
     >
-      <p className="font-display text-3xl text-brand">Umbrella Express</p>
-      <p className="mt-2 text-sm text-ink-muted">
-        Connexion portail
-        {USE_MOCK ? " · mode démo" : ""}
-      </p>
-
-      <label className="mt-8 block text-sm font-medium text-ink">
-        Email
-        <input
-          className="mt-1.5 w-full rounded-xl border border-cream-soft bg-cream-soft/30 px-3 py-2.5 outline-none ring-brand focus:ring-2"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+      <form onSubmit={onSubmit} className="space-y-4">
+        <TextField
+          label="Email"
           type="email"
           autoComplete="username"
           required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
-      </label>
-
-      <label className="mt-4 block text-sm font-medium text-ink">
-        Mot de passe
-        <input
-          className="mt-1.5 w-full rounded-xl border border-cream-soft bg-cream-soft/30 px-3 py-2.5 outline-none ring-brand focus:ring-2"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+        <TextField
+          label="Mot de passe"
           type="password"
           autoComplete="current-password"
           required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
-      </label>
+        <div className="flex justify-end">
+          <Link href="/forgot-password" className="text-sm text-ink-muted hover:text-brand">
+            Mot de passe oublié ?
+          </Link>
+        </div>
+        {error ? <ErrorBanner message={error} /> : null}
+        <Button type="submit" icon={LogIn} loading={loading} className="w-full">
+          Se connecter
+        </Button>
+      </form>
 
-      {error ? <p className="mt-3 text-sm text-brand-soft">{error}</p> : null}
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="mt-6 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-soft disabled:opacity-60"
-      >
-        {loading ? "Connexion..." : "Se connecter"}
-      </button>
-
-      <p className="mt-4 text-center text-sm text-ink-muted">
-        <Link href="/forgot-password" className="hover:text-brand">
-          Mot de passe oublié
-        </Link>
-        {" · "}
-        <Link href="/signup" className="font-semibold text-brand hover:underline">
-          Créer un compte
-        </Link>
-      </p>
-
-      {USE_MOCK ? (
-        <div className="mt-6 space-y-2 border-t border-cream-soft pt-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-            Comptes démo
-          </p>
-          {[
-            ["admin@umbrella.tn", "Admin@12345", "Admin"],
-            ["expediteur@umbrella.tn", "Expediteur@12345", "Expéditeur"],
-            ["livreur@umbrella.tn", "Livreur@12345", "Livreur"],
-            ["client@umbrella.tn", "Client@12345", "Client"],
-            ["super@umbrella.tn", "Super@12345", "Super"],
-          ].map(([em, pw, label]) => (
+      <div className="mt-8 rounded-2xl border border-cream bg-cream-soft/30 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+          Comptes de démonstration
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {DEMO_ACCOUNTS.map((acc) => (
             <button
-              key={em}
+              key={acc.email}
               type="button"
-              onClick={() => fillDemo(em, pw)}
-              className="flex w-full items-center justify-between rounded-lg border border-cream-soft px-3 py-2 text-left text-xs hover:border-brand"
+              onClick={() => {
+                setEmail(acc.email);
+                setPassword(acc.password);
+                setError(null);
+              }}
+              className="rounded-xl border border-cream bg-surface px-3 py-2 text-left transition hover:border-brand"
             >
-              <span className="font-medium text-ink">{label}</span>
-              <span className="text-ink-muted">{em}</span>
+              <span className="block text-sm font-semibold text-ink">{acc.label}</span>
+              <span className="block truncate text-[11px] text-ink-muted">{acc.email}</span>
             </button>
           ))}
         </div>
-      ) : null}
-    </form>
+      </div>
+    </AuthLayout>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4">
-      <div className="absolute right-4 top-4">
-        <ThemeToggle />
-      </div>
-      <Suspense
-        fallback={<p className="text-sm text-ink-muted">Chargement…</p>}
-      >
-        <LoginForm />
-      </Suspense>
-    </div>
+    <Suspense fallback={<p className="p-8 text-center text-sm text-ink-muted">Chargement…</p>}>
+      <LoginForm />
+    </Suspense>
   );
 }

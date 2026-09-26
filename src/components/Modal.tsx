@@ -22,34 +22,45 @@ export function Modal({
   onClose: () => void;
   title: string;
   description?: string;
-  children: ReactNode;
+  children?: ReactNode;
   footer?: ReactNode;
   size?: "md" | "lg" | "xl";
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
-    const t = window.setTimeout(() => {
-      panelRef.current
-        ?.querySelector<HTMLElement>(
-          "input, select, textarea, button:not([data-modal-close])",
-        )
-        ?.focus();
-    }, 40);
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
-      window.clearTimeout(t);
     };
-  }, [open, onClose]);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const alreadyInside = panel.contains(document.activeElement);
+    if (alreadyInside) return;
+    const t = window.setTimeout(() => {
+      if (panel.contains(document.activeElement)) return;
+      panel
+        .querySelector<HTMLElement>(
+          "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])",
+        )
+        ?.focus();
+    }, 40);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
   if (!open) return null;
 
@@ -66,7 +77,7 @@ export function Modal({
         type="button"
         aria-label="Fermer"
         className="absolute inset-0 bg-ink/50 backdrop-blur-[2px]"
-        onClick={onClose}
+        onClick={() => onCloseRef.current()}
       />
 
       <div
@@ -94,7 +105,7 @@ export function Modal({
           <button
             type="button"
             data-modal-close
-            onClick={onClose}
+            onClick={() => onCloseRef.current()}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cream text-ink transition hover:border-brand hover:text-brand"
             aria-label="Fermer"
           >
@@ -102,9 +113,11 @@ export function Modal({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
-          {children}
-        </div>
+        {children ? (
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
+            {children}
+          </div>
+        ) : null}
 
         {footer ? (
           <footer className="shrink-0 border-t border-cream bg-surface px-4 py-3 sm:px-5">

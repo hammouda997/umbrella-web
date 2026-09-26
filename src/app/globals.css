@@ -56,35 +56,19 @@ html.dark main {
   color: #ffffff;
 }
 
-/* Force readable text in dark mode — overrides faded Tailwind classes */
-html.dark .text-ink,
-html.dark .text-ink-muted,
-html.dark h1,
-html.dark h2,
-html.dark h3,
-html.dark p,
-html.dark span,
-html.dark td,
-html.dark th,
-html.dark label,
-html.dark li,
-html.dark a:not([class*="bg-brand"]) {
-  color: #ffffff;
-}
-
-html.dark .text-ink-muted,
-html.dark .text-xs,
-html.dark .text-sm.text-ink-muted {
-  color: #e8e4df !important;
-}
-
-html.dark .text-brand,
-html.dark a.text-brand {
-  color: #ef5a50 !important;
+html.dark input,
+html.dark select,
+html.dark textarea {
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-brand) 70%, transparent);
+  outline-offset: 2px;
 }
 
 @layer utilities {
@@ -103,20 +87,8 @@ html.dark a.text-brand {
 }
 
 .portal-sidebar {
-  background-color: #1a1414 !important;
-  color: #ffffff !important;
-}
-
-.portal-sidebar a,
-.portal-sidebar button,
-.portal-sidebar p,
-.portal-sidebar span {
-  color: #ffffff !important;
-}
-
-.portal-sidebar .text-\[\#C49A5A\],
-.portal-sidebar [class*="text-[#C49A5A]"] {
-  color: #e8c07a !important;
+  background-color: #1a1414;
+  color: #ffffff;
 }
 
 .landing .hero-brand {

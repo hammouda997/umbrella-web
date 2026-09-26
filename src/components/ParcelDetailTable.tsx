@@ -1,123 +1,133 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { FileSpreadsheet, FileText, Pencil, Printer, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { cn } from "@/lib/cn";
-import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 import {
-  downloadParcelsExcel,
-  openBordereauPdf,
-  openParcelListPdf,
-} from "@/lib/parcel-report";
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  FileSpreadsheet,
+  FileText,
+  Package,
+  Pencil,
+  Printer,
+} from "lucide-react";
+import { useToast } from "@/components/Feedback";
+import {
+  Button,
+  EmptyState,
+  SearchInput,
+  StatusBadge,
+  TableCard,
+  tableClass,
+  tdClass,
+  theadClass,
+  thClass,
+  trClass,
+} from "@/components/ui";
+import { cn } from "@/lib/cn";
+import { formatTnd, type Parcel } from "@/lib/domain";
+import { downloadParcelsExcel, openBordereauPdf, openParcelListPdf } from "@/lib/parcel-report";
 import { useAuth } from "@/lib/auth-context";
 import { canSeeDeliveryMode } from "@/lib/roles";
+import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 
-gsap.registerPlugin(useGSAP);
+export type DetailParcel = Parcel;
 
-export type DetailParcel = {
-  id: number;
-  code: string | null;
-  recipientName: string;
-  phone: string;
-  address: string;
-  city: string;
-  governorate: string;
-  price: string | number;
-  notes: string | null;
-  status: string;
-  mode: "EXTERNAL" | "INTERNAL";
-  bordereauUrl: string | null;
-  createdAt: string;
-};
+type SortKey = "code" | "recipientName" | "price" | "createdAt" | "status";
 
-type SortKey = "code" | "recipientName" | "price" | "createdAt" | "notes";
+const PAGE_SIZE = 10;
+
+function compare(a: Parcel, b: Parcel, key: SortKey) {
+  if (key === "price") return Number(a.price) - Number(b.price);
+  if (key === "createdAt") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  return String(a[key] ?? "").localeCompare(String(b[key] ?? ""), "fr", { numeric: true });
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("fr-TN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export function ParcelDetailTable({
   rows,
   onEdit,
+  canEditRow,
   detailBasePath,
   reportTitle = "Liste des colis",
+  loading = false,
 }: {
-  rows: DetailParcel[];
-  onEdit?: (row: DetailParcel) => void;
+  rows: Parcel[];
+  onEdit?: (row: Parcel) => void;
+  canEditRow?: (row: Parcel) => boolean;
   detailBasePath?: string;
   reportTitle?: string;
+  loading?: boolean;
 }) {
   const { session } = useAuth();
+  const toast = useToast();
   const showModes = canSeeDeliveryMode(session?.user.role);
-  const root = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const pageSize = 8;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = rows.filter((r) => {
-      if (!q) return true;
-      const blob = [
-        r.code,
-        r.recipientName,
-        r.phone,
-        r.address,
-        r.city,
-        r.governorate,
-        r.notes,
-        r.status,
-        String(r.price),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return blob.includes(q);
-    });
-
-    list.sort((a, b) => {
-      const av = a[sortKey] ?? "";
-      const bv = b[sortKey] ?? "";
-      const cmp = String(av).localeCompare(String(bv), "fr", { numeric: true });
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+    const list = q
+      ? rows.filter((r) =>
+          [
+            r.code,
+            r.recipientName,
+            r.phone,
+            r.address,
+            r.city,
+            r.governorate,
+            r.notes,
+            r.designation,
+            STATUS_META[r.status as StatusKey]?.label ?? r.status,
+            String(r.price),
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        )
+      : [...rows];
+    list.sort((a, b) => (sortDir === "asc" ? 1 : -1) * compare(a, b, sortKey));
     return list;
   }, [rows, query, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  useGSAP(
-    () => {
-      gsap.from(".detail-row", {
-        autoAlpha: 0,
-        y: 14,
-        duration: 0.35,
-        stagger: 0.04,
-        ease: "power2.out",
-      });
-    },
-    { scope: root, dependencies: [pageRows] },
-  );
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const firstIndex = filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const lastIndex = (currentPage - 1) * PAGE_SIZE + pageRows.length;
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir("asc");
+      setSortDir(key === "createdAt" || key === "price" ? "desc" : "asc");
     }
   }
 
+  function reportSlug() {
+    return (
+      reportTitle
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 40) || "colis"
+    );
+  }
+
   function exportExcel() {
-    const slug = reportTitle
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 40);
-    downloadParcelsExcel(filtered, `umbrella-${slug || "colis"}`, {
-      includeMode: showModes,
-    });
+    downloadParcelsExcel(filtered, `umbrella-${reportSlug()}`, { includeMode: showModes });
   }
 
   function exportPdf() {
@@ -129,215 +139,233 @@ export function ParcelDetailTable({
         includeMode: showModes,
       });
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Export PDF impossible");
+      toast.error("Export PDF impossible", err instanceof Error ? err.message : undefined);
     }
   }
 
-  function printBordereau(row: DetailParcel) {
-    if (row.bordereauUrl) {
+  function printBordereau(row: Parcel) {
+    if (row.bordereauUrl && !row.bordereauUrl.includes("example.com")) {
       window.open(row.bordereauUrl, "_blank", "noopener,noreferrer");
       return;
     }
     try {
       openBordereauPdf(row, { includeMode: showModes });
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Bordereau impossible");
+      toast.error("Bordereau impossible", err instanceof Error ? err.message : undefined);
     }
   }
 
-  function SortHead({
-    label,
-    column,
-  }: {
-    label: string;
-    column: SortKey;
-  }) {
+  function SortHead({ label, column, className }: { label: string; column: SortKey; className?: string }) {
+    const active = sortKey === column;
+    const Icon = active ? (sortDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
     return (
-      <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+      <th
+        className={cn(thClass, className)}
+        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      >
         <button
           type="button"
           onClick={() => toggleSort(column)}
-          className="inline-flex items-center gap-1 hover:text-brand"
+          className={cn("inline-flex items-center gap-1 hover:text-brand", active && "text-ink")}
         >
           {label}
-          <span className="text-[9px] opacity-60">
-            {sortKey === column ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
-          </span>
+          <Icon className="h-3 w-3 opacity-70" aria-hidden />
         </button>
       </th>
     );
   }
 
-  return (
-    <div ref={root} className="overflow-hidden rounded-2xl border border-cream bg-surface shadow-soft">
-      <div className="flex flex-col gap-3 border-b border-cream-soft bg-cream-soft/40 px-4 py-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="font-display text-lg font-bold text-ink">Détail</h2>
-          <button
-            type="button"
-            onClick={exportExcel}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-cream bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-brand hover:text-brand"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            Excel
-          </button>
-          <button
-            type="button"
-            onClick={exportPdf}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-cream bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-brand hover:text-brand"
-          >
-            <FileText className="h-3.5 w-3.5" />
-            PDF
-          </button>
-        </div>
+  function codeCell(row: Parcel) {
+    return detailBasePath ? (
+      <Link
+        href={`${detailBasePath}/${row.id}`}
+        className="font-mono text-xs font-semibold text-brand hover:underline"
+      >
+        {row.code ?? `#${row.id}`}
+      </Link>
+    ) : (
+      <span className="font-mono text-xs font-semibold text-ink">{row.code ?? `#${row.id}`}</span>
+    );
+  }
 
-        <label className="relative inline-flex items-center">
-          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-ink-muted" />
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search"
-            className="w-full rounded-xl border border-cream bg-surface py-2 pl-9 pr-3 text-sm outline-none ring-brand focus:ring-2 md:w-64"
-          />
-        </label>
+  function rowActions(row: Parcel) {
+    const editable = onEdit && (canEditRow ? canEditRow(row) : true);
+    return (
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          title="Imprimer le bordereau"
+          aria-label={`Imprimer le bordereau ${row.code ?? row.id}`}
+          onClick={() => printBordereau(row)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-cream text-ink-muted transition hover:border-brand hover:text-brand"
+        >
+          <Printer className="h-4 w-4" />
+        </button>
+        {onEdit ? (
+          <button
+            type="button"
+            title={editable ? "Modifier" : "Seuls les colis en attente sont modifiables"}
+            aria-label={`Modifier ${row.code ?? row.id}`}
+            disabled={!editable}
+            onClick={() => onEdit(row)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-cream text-ink-muted transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
+    );
+  }
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-cream-soft/70">
-            <tr>
-              <SortHead label="Code" column="code" />
-              <SortHead label="Nom" column="recipientName" />
-              <SortHead label="Prix" column="price" />
-              <SortHead label="Date d'ajout" column="createdAt" />
-              <SortHead label="Désignation" column="notes" />
-              <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-                Bordereau
-              </th>
-              <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-                BL
-              </th>
-              <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-                Modifier
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((row, idx) => {
-              const statusLabel =
-                STATUS_META[row.status as StatusKey]?.label ?? row.status;
-              const isExchange = row.status === "ECHANGES";
-              return (
-                <tr
-                  key={row.id}
-                  className={cn(
-                    "detail-row border-t border-cream-soft transition hover:bg-brand/[0.03]",
-                    idx % 2 === 1 ? "bg-cream-soft/25" : "bg-surface",
-                  )}
-                >
-                  <td className="px-3 py-3 align-top">
-                    {detailBasePath ? (
-                      <Link
-                        href={`${detailBasePath}/${row.id}`}
-                        className="font-semibold text-brand hover:underline"
-                      >
-                        {row.code}
-                      </Link>
-                    ) : (
-                      <p className="font-semibold text-ink">{row.code}</p>
-                    )}
-                    {isExchange ? (
-                      <p className="text-xs font-semibold text-brand-soft">Echange</p>
-                    ) : (
-                      <p className="text-[11px] text-ink-muted">{statusLabel}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    <p className="font-semibold text-ink">{row.recipientName}</p>
-                    <p className="text-xs text-ink-muted">{row.phone}</p>
-                    <p className="mt-0.5 max-w-xs text-xs leading-snug text-ink-muted">
-                      {row.address} {row.city} {row.governorate}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3 align-top font-semibold text-ink">{row.price}</td>
-                  <td className="px-3 py-3 align-top text-ink-muted">
-                    {new Date(row.createdAt).toLocaleString("fr-TN")}
-                  </td>
-                  <td className="px-3 py-3 align-top text-ink">{row.notes ?? "—"}</td>
-                  <td className="px-3 py-3 align-top">
-                    <button
-                      type="button"
-                      title="Bordereau"
-                      onClick={() => printBordereau(row)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white shadow-sm transition hover:bg-brand-soft"
-                    >
-                      <Printer className="h-4 w-4" />
-                    </button>
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    <button
-                      type="button"
-                      title="Bon de livraison"
-                      onClick={() => printBordereau(row)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gold text-white shadow-sm transition hover:opacity-90"
-                    >
-                      <Printer className="h-4 w-4" />
-                    </button>
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    <button
-                      type="button"
-                      title="Modifier"
-                      onClick={() => onEdit?.(row)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#2f7d5b] text-white shadow-sm transition hover:brightness-110"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {pageRows.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-ink-muted">
-                  Aucun colis
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+  const toolbar = (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={exportExcel}>
+          Excel
+        </Button>
+        <Button variant="secondary" size="sm" icon={FileText} onClick={exportPdf}>
+          PDF
+        </Button>
       </div>
+      <SearchInput
+        value={query}
+        onChange={(value) => {
+          setQuery(value);
+          setPage(1);
+        }}
+        placeholder="Code, nom, téléphone, ville…"
+        className="w-full md:w-72"
+      />
+    </>
+  );
 
-      <div className="flex flex-col gap-3 border-t border-cream-soft px-4 py-3 text-xs text-ink-muted md:flex-row md:items-center md:justify-between">
-        <p>
-          Showing {(currentPage - 1) * pageSize + (pageRows.length ? 1 : 0)} to{" "}
-          {(currentPage - 1) * pageSize + pageRows.length} of {filtered.length} entries
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={currentPage <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-lg border border-cream px-3 py-1.5 disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <span className="rounded-lg bg-brand px-3 py-1.5 font-semibold text-white">
-            {currentPage}
-          </span>
-          <button
-            type="button"
-            disabled={currentPage >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="rounded-lg border border-cream px-3 py-1.5 disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
+  const footer = (
+    <div className="flex flex-col gap-3 text-xs text-ink-muted sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        {filtered.length === 0
+          ? "Aucun résultat"
+          : `${firstIndex}–${lastIndex} sur ${filtered.length} colis`}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={currentPage <= 1}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+        >
+          Précédent
+        </Button>
+        <span className="min-w-[4rem] text-center font-semibold text-ink">
+          {currentPage} / {totalPages}
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={currentPage >= totalPages}
+          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+        >
+          Suivant
+        </Button>
       </div>
     </div>
+  );
+
+  if (loading) {
+    return (
+      <TableCard toolbar={toolbar}>
+        <div className="space-y-2 p-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
+          ))}
+        </div>
+      </TableCard>
+    );
+  }
+
+  return (
+    <TableCard toolbar={toolbar} footer={filtered.length > PAGE_SIZE || query ? footer : undefined}>
+      {pageRows.length === 0 ? (
+        <div className="p-6">
+          <EmptyState
+            icon={Package}
+            title={query ? "Aucun colis ne correspond" : "Aucun colis"}
+            description={
+              query ? "Essayez un autre code, nom ou téléphone." : "Les colis apparaîtront ici."
+            }
+          />
+        </div>
+      ) : (
+        <>
+          <ul className="divide-y divide-cream/70 md:hidden">
+            {pageRows.map((row) => (
+              <li key={row.id} className="space-y-2 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    {codeCell(row)}
+                    <p className="truncate font-semibold text-ink">{row.recipientName}</p>
+                    <p className="truncate text-xs text-ink-muted">
+                      {row.city}, {row.governorate} · {row.phone}
+                    </p>
+                  </div>
+                  <StatusBadge status={row.status} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-ink">{formatTnd(row.price)}</p>
+                  {rowActions(row)}
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <table className={cn(tableClass, "hidden md:table")}>
+            <thead className={theadClass}>
+              <tr>
+                <SortHead label="Code" column="code" />
+                <SortHead label="Destinataire" column="recipientName" />
+                <SortHead label="Statut" column="status" />
+                <SortHead label="COD" column="price" className="text-right" />
+                <SortHead label="Ajouté le" column="createdAt" />
+                <th className={thClass}>Désignation</th>
+                <th className={cn(thClass, "text-right")}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((row) => (
+                <tr key={row.id} className={trClass}>
+                  <td className={tdClass}>
+                    {codeCell(row)}
+                    {showModes ? (
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                        {row.mode}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className={tdClass}>
+                    <p className="font-semibold text-ink">{row.recipientName}</p>
+                    <p className="text-xs text-ink-muted">{row.phone}</p>
+                    <p className="max-w-xs truncate text-xs text-ink-muted">
+                      {row.address}, {row.city} · {row.governorate}
+                    </p>
+                  </td>
+                  <td className={tdClass}>
+                    <StatusBadge status={row.status} />
+                  </td>
+                  <td className={cn(tdClass, "whitespace-nowrap text-right font-semibold text-ink")}>
+                    {formatTnd(row.price)}
+                  </td>
+                  <td className={cn(tdClass, "whitespace-nowrap text-ink-muted")}>
+                    {formatDate(row.createdAt)}
+                  </td>
+                  <td className={cn(tdClass, "max-w-[12rem] truncate text-ink")}>
+                    {row.designation ?? row.notes ?? "—"}
+                  </td>
+                  <td className={tdClass}>{rowActions(row)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </TableCard>
   );
 }

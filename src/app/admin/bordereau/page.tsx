@@ -1,37 +1,43 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { Printer } from "lucide-react";
+import { useToast } from "@/components/Feedback";
+import {
+  Button,
+  EmptyState,
+  LoadingBlock,
+  PageHeader,
+  Panel,
+  buttonClass,
+} from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
-import { PageHeader, Panel, LoadingBlock, EmptyState } from "@/components/ui";
-import type { MockParcel } from "@/lib/mock-data";
+import { formatTnd, type Parcel } from "@/lib/domain";
 import { openBordereauPdf } from "@/lib/parcel-report";
+import { PORTAL_BY_ROLE } from "@/lib/roles";
+import { useApiQuery } from "@/lib/use-api";
 
 function BordereauInner() {
   const { session } = useAuth();
-  const params = useSearchParams();
-  const id = params.get("id");
-  const [parcel, setParcel] = useState<MockParcel | null>(null);
-  const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const id = useSearchParams().get("id");
+  const base = session ? PORTAL_BY_ROLE[session.user.role] : "/admin";
+  const { data: parcel, loading } = useApiQuery<Parcel>(id ? `/parcels/${id}` : null);
 
-  useEffect(() => {
-    if (!session?.accessToken || !id) {
-      setLoading(false);
-      return;
-    }
-    apiFetch<MockParcel>(`/parcels/${id}`, { token: session.accessToken })
-      .then(setParcel)
-      .catch(() => setParcel(null))
-      .finally(() => setLoading(false));
-  }, [session, id]);
-
-  if (loading) return <LoadingBlock label="Préparation du bordereau…" />;
+  if (loading && !parcel) return <LoadingBlock label="Préparation du bordereau…" />;
   if (!parcel) {
     return (
       <EmptyState
+        icon={Printer}
         title="Bordereau indisponible"
-        description="Sélectionnez un colis depuis la liste pour prévisualiser."
+        description="Ouvrez un colis puis cliquez sur « Bordereau » pour l'imprimer."
+        action={
+          <Link href={`${base}/parcels`} className={buttonClass("secondary")}>
+            Voir les colis
+          </Link>
+        }
       />
     );
   }
@@ -40,55 +46,45 @@ function BordereauInner() {
     <div className="space-y-6">
       <PageHeader
         title="Bordereau"
-        description={parcel.code}
+        description={parcel.code ?? `#${parcel.id}`}
         actions={
-          <button
-            type="button"
+          <Button
+            icon={Printer}
+            className="print:hidden"
             onClick={() => {
               try {
                 openBordereauPdf(parcel);
               } catch (err) {
-                window.alert(
-                  err instanceof Error ? err.message : "Impression impossible",
-                );
+                toast.error("Impression impossible", err instanceof Error ? err.message : undefined);
               }
             }}
-            className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white print:hidden"
           >
             Imprimer / PDF
-          </button>
+          </Button>
         }
       />
 
       <Panel className="mx-auto max-w-lg print:border-0 print:shadow-none">
-        <div className="border-b border-cream-soft pb-4 text-center">
-          <p className="font-display text-2xl font-extrabold text-brand">
-            Umbrella Express
-          </p>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-ink-muted">
-            Bordereau de livraison
-          </p>
+        <div className="border-b border-cream pb-4 text-center">
+          <p className="font-display text-2xl font-extrabold text-brand">Umbrella Express</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-ink-muted">Bordereau de livraison</p>
         </div>
         <div className="mt-6 space-y-4 text-sm">
-          <p className="font-mono text-lg font-bold tracking-wide text-ink">
-            {parcel.code}
-          </p>
+          <p className="font-mono text-lg font-bold tracking-wide text-ink">{parcel.code}</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-[11px] uppercase text-ink-muted">Destinataire</p>
-              <p className="font-semibold">{parcel.recipientName}</p>
-              <p>{parcel.phone}</p>
+              <p className="font-semibold text-ink">{parcel.recipientName}</p>
+              <p className="text-ink">{parcel.phone}</p>
             </div>
             <div>
               <p className="text-[11px] uppercase text-ink-muted">COD</p>
-              <p className="font-display text-xl font-bold text-brand">
-                {parcel.price} TND
-              </p>
+              <p className="font-display text-xl font-bold text-brand">{formatTnd(parcel.price)}</p>
             </div>
           </div>
           <div>
             <p className="text-[11px] uppercase text-ink-muted">Adresse</p>
-            <p className="font-medium">
+            <p className="font-medium text-ink">
               {parcel.address}
               <br />
               {parcel.city}, {parcel.governorate}
@@ -96,14 +92,16 @@ function BordereauInner() {
           </div>
           <div>
             <p className="text-[11px] uppercase text-ink-muted">Contenu</p>
-            <p>{parcel.notes ?? parcel.designation ?? "—"}</p>
+            <p className="text-ink">{parcel.designation ?? parcel.notes ?? "—"}</p>
           </div>
           <div className="mt-8 flex justify-center">
-            <div className="h-16 w-48 rounded border border-dashed border-ink/30 bg-cream-soft/50" />
+            <div
+              className="h-16 w-56 rounded bg-[repeating-linear-gradient(90deg,#1A1414_0_2px,transparent_2px_5px,#1A1414_5px_6px,transparent_6px_9px)]"
+              aria-label={`Code-barres ${parcel.code}`}
+              role="img"
+            />
           </div>
-          <p className="text-center text-[10px] text-ink-muted">
-            Code-barres (aperçu démo)
-          </p>
+          <p className="text-center font-mono text-[11px] text-ink-muted">{parcel.code}</p>
         </div>
       </Panel>
     </div>

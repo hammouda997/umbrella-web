@@ -2,35 +2,43 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Crosshair, MapPin, RefreshCw, Route } from "lucide-react";
-import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { Crosshair, MapPin, Phone, RefreshCw, Route } from "lucide-react";
+import { useToast } from "@/components/Feedback";
+import { Modal } from "@/components/Modal";
 import {
-  ACTION_TONE_CLASS,
-  livreurActionsFor,
-  type LivreurAction,
-} from "@/lib/livreur-actions";
-import {
-  buildTourByPlaces,
-  flattenTourStops,
-  googleMapsTourUrl,
-} from "@/lib/tour-planner";
-import {
-  getCurrentPositionPrecise,
-  mapsNavigateUrl,
-  queryGeoPermission,
-} from "@/lib/geolocation";
-import {
-  estimateParcelCoords,
-  sortByDistanceFrom,
-} from "@/lib/geo-distance";
-import {
+  Button,
   EmptyState,
   LoadingBlock,
   PageHeader,
   Panel,
 } from "@/components/ui";
+import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import {
+  estimateParcelCoords,
+  sortByDistanceFrom,
+} from "@/lib/geo-distance";
+import {
+  getCurrentPositionPrecise,
+  mapsNavigateUrl,
+  queryGeoPermission,
+} from "@/lib/geolocation";
+import { pushLocalActivity } from "@/lib/local-activity";
+import {
+  ACTION_TONE_CLASS,
+  formatDisplayPhone,
+  livreurActionsFor,
+  smsHref,
+  telHref,
+  whatsappHref,
+  type LivreurAction,
+} from "@/lib/livreur-actions";
+import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import {
+  buildTourByPlaces,
+  flattenTourStops,
+  googleMapsTourUrl,
+} from "@/lib/tour-planner";
 
 type TourParcel = {
   id: number;
@@ -48,8 +56,22 @@ type TourParcel = {
   lng?: number | null;
 };
 
+function defaultDatetimeLocal(): string {
+  const d = new Date();
+  d.setHours(d.getHours() + 2, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatReportComment(datetimeLocal: string): string {
+  const [datePart, timePart = "00:00"] = datetimeLocal.split("T");
+  const time = timePart.slice(0, 5);
+  return `Reporté au ${datePart} ${time}`;
+}
+
 export function LivreurTour() {
   const { session } = useAuth();
+  const toast = useToast();
   const [parcels, setParcels] = useState<TourParcel[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -67,6 +89,23 @@ export function LivreurTour() {
     action: LivreurAction;
   } | null>(null);
   const [comment, setComment] = useState("");
+  const [reportAt, setReportAt] = useState(defaultDatetimeLocal);
+  const [inAppCall, setInAppCall] = useState<TourParcel | null>(null);
+
+  const userId = session?.user.id ?? 0;
+
+  function notifyAction(title: string, body: string, targetId?: number) {
+    toast.info(title, body);
+    if (userId) {
+      pushLocalActivity({
+        userId,
+        title,
+        body,
+        kind: "parcel",
+        targetId: targetId ?? null,
+      });
+    }
+  }
 
   async function load() {
     if (!session?.accessToken) return;
@@ -182,15 +221,16 @@ export function LivreurTour() {
   }
 
   async function applyStatus(
-    parcelId: number,
+    parcel: TourParcel,
     status: string,
-    note?: string,
+    note: string | undefined,
+    actionLabel: string,
   ) {
     if (!session?.accessToken) return;
-    setBusyId(parcelId);
+    setBusyId(parcel.id);
     setMessage(null);
     try {
-      await apiFetch(`/parcels/${parcelId}/status`, {
+      await apiFetch(`/parcels/${parcel.id}/status`, {
         method: "PATCH",
         token: session.accessToken,
         body: JSON.stringify({
@@ -199,34 +239,110 @@ export function LivreurTour() {
           actor: "LIVREUR",
         }),
       });
+      const body = note
+        ? `${parcel.code ?? parcel.id} · ${note}`
+        : `${parcel.code ?? parcel.id} · ${STATUS_META[status as StatusKey]?.label ?? status}`;
+      toast.success(actionLabel, body);
+      if (userId) {
+        pushLocalActivity({
+          userId,
+          title: actionLabel,
+          body,
+          kind: "parcel",
+          targetId: parcel.id,
+        });
+      }
       setMessage("Statut mis à jour");
       setPending(null);
       setComment("");
+      setReportAt(defaultDatetimeLocal());
       await load();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Erreur");
+      const err = e instanceof Error ? e.message : "Erreur";
+      toast.error("Échec", err);
+      setMessage(err);
     } finally {
       setBusyId(null);
     }
   }
 
   function onAction(parcel: TourParcel, action: LivreurAction) {
-    if (action.needsComment) {
+    if (action.needsDatetime || action.needsComment) {
       setPending({ parcel, action });
-      setComment("");
+      setComment(
+        action.id === "bad-phone"
+          ? "Téléphone incorrect"
+          : action.id === "bad-address"
+            ? "Adresse incorrecte"
+            : action.id === "blocked"
+              ? "Livreur bloqué"
+              : "",
+      );
+      setReportAt(defaultDatetimeLocal());
       return;
     }
-    void applyStatus(parcel.id, action.status);
+    void applyStatus(parcel, action.status, undefined, action.label);
   }
 
   function onConfirmComment(e: FormEvent) {
     e.preventDefault();
     if (!pending) return;
+    if (pending.action.needsDatetime) {
+      if (!reportAt) {
+        setMessage("Choisissez une date et une heure");
+        return;
+      }
+      void applyStatus(
+        pending.parcel,
+        pending.action.status,
+        formatReportComment(reportAt),
+        pending.action.label,
+      );
+      return;
+    }
     if (!comment.trim()) {
       setMessage("Un commentaire est requis pour cette action");
       return;
     }
-    void applyStatus(pending.parcel.id, pending.action.status, comment.trim());
+    void applyStatus(
+      pending.parcel,
+      pending.action.status,
+      comment.trim(),
+      pending.action.label,
+    );
+  }
+
+  function onNativeCall(parcel: TourParcel) {
+    notifyAction(
+      "Appel (téléphone)",
+      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
+      parcel.id,
+    );
+  }
+
+  function onInAppCall(parcel: TourParcel) {
+    setInAppCall(parcel);
+    notifyAction(
+      "Appel (site)",
+      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
+      parcel.id,
+    );
+  }
+
+  function onSms(parcel: TourParcel) {
+    notifyAction(
+      "SMS",
+      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
+      parcel.id,
+    );
+  }
+
+  function onWhatsApp(parcel: TourParcel) {
+    notifyAction(
+      "WhatsApp",
+      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
+      parcel.id,
+    );
   }
 
   function renderParcelCard(
@@ -259,7 +375,8 @@ export function LivreurTour() {
               {p.city} · {p.governorate}
               {distanceKm != null ? (
                 <span className="ml-1 font-semibold text-brand">
-                  · {distanceKm < 1
+                  ·{" "}
+                  {distanceKm < 1
                     ? `${Math.round(distanceKm * 1000)} m`
                     : `${distanceKm.toFixed(1)} km`}
                 </span>
@@ -280,15 +397,45 @@ export function LivreurTour() {
         </div>
 
         <p className="mt-3 text-sm text-ink-muted">{p.address}</p>
-        <p className="mt-1 font-semibold text-ink">{p.price} TND COD</p>
+        <p className="mt-1 text-sm font-semibold text-ink">
+          {formatDisplayPhone(p.phone)}
+        </p>
+        <p className="mt-0.5 font-semibold text-ink">{p.price} TND COD</p>
 
-        <div className="mt-3 flex gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2">
           <a
-            href={`tel:${p.phone}`}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
+            href={telHref(p.phone)}
+            onClick={() => onNativeCall(p)}
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream bg-surface px-3 py-3 text-sm font-bold text-ink"
           >
-            <span aria-hidden>📞</span>
-            Appeler
+            <Phone className="h-4 w-4" />
+            Appel tél.
+          </a>
+          <button
+            type="button"
+            onClick={() => onInAppCall(p)}
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream bg-surface px-3 py-3 text-sm font-bold text-ink"
+          >
+            <span aria-hidden>💻</span>
+            Appel site
+          </button>
+          <a
+            href={smsHref(p.phone)}
+            onClick={() => onSms(p)}
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream bg-surface px-3 py-3 text-sm font-bold text-ink"
+          >
+            <span aria-hidden>💬</span>
+            Msg
+          </a>
+          <a
+            href={whatsappHref(p.phone)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => onWhatsApp(p)}
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 px-3 py-3 text-sm font-bold text-ink"
+          >
+            <span aria-hidden>🟢</span>
+            WhatsApp
           </a>
           <a
             href={mapsNavigateUrl({
@@ -298,7 +445,7 @@ export function LivreurTour() {
             })}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
+            className="col-span-2 inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream py-3 text-sm font-bold text-ink"
           >
             <span aria-hidden>🗺️</span>
             GPS
@@ -312,7 +459,7 @@ export function LivreurTour() {
               type="button"
               disabled={busy}
               onClick={() => onAction(p, action)}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold disabled:opacity-50 ${ACTION_TONE_CLASS[action.tone]}`}
+              className={`inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 ${ACTION_TONE_CLASS[action.tone]}`}
             >
               <span aria-hidden>{action.emoji}</span>
               {action.label}
@@ -449,7 +596,7 @@ export function LivreurTour() {
           {places.map((place, placeIndex) => {
             const baseIndex = places
               .slice(0, placeIndex)
-              .reduce((sum, p) => sum + p.stops.length, 0);
+              .reduce((sum, pl) => sum + pl.stops.length, 0);
             return (
               <section key={place.placeKey} className="space-y-3">
                 <div className="flex items-center gap-3 rounded-xl bg-brand px-4 py-3 text-white">
@@ -465,9 +612,9 @@ export function LivreurTour() {
                   </div>
                 </div>
                 <ul className="space-y-3">
-                  {place.stops.map((p, i) => (
-                    <li key={p.id}>
-                      {renderParcelCard(p, baseIndex + i + 1)}
+                  {place.stops.map((parcel, i) => (
+                    <li key={parcel.id}>
+                      {renderParcelCard(parcel, baseIndex + i + 1)}
                     </li>
                   ))}
                 </ul>
@@ -489,54 +636,108 @@ export function LivreurTour() {
         </ul>
       ) : null}
 
-      {pending ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center">
-          <form
-            onSubmit={onConfirmComment}
-            className="w-full max-w-md rounded-2xl border border-cream bg-surface p-5 shadow-soft"
-          >
-            <p className="font-display text-lg font-bold text-ink">
-              <span aria-hidden className="mr-1.5">
-                {pending.action.emoji}
-              </span>
-              {pending.action.label}
-            </p>
-            <p className="mt-1 text-sm text-ink-muted">
-              {pending.parcel.code} · {pending.parcel.recipientName}
-            </p>
-            <label className="mt-4 block text-sm font-medium text-ink">
-              {pending.action.commentLabel ?? "Commentaire"}
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                rows={3}
-                required
-                className="mt-1.5 w-full rounded-xl border border-cream px-3 py-2.5 text-sm outline-none ring-brand focus:ring-2"
-                placeholder="Ex. report demain 10h, numéro erroné…"
-              />
-            </label>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPending(null);
-                  setComment("");
-                }}
-                className="flex-1 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                disabled={busyId === pending.parcel.id}
-                className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                Confirmer
-              </button>
-            </div>
+      <Modal
+        open={Boolean(pending)}
+        onClose={() => {
+          setPending(null);
+          setComment("");
+        }}
+        title={pending?.action.label ?? "Action"}
+        description={
+          pending
+            ? `${pending.parcel.code ?? pending.parcel.id} · ${pending.parcel.recipientName}`
+            : undefined
+        }
+        size="md"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setPending(null);
+                setComment("");
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="submit"
+              form="livreur-action-form"
+              loading={Boolean(pending && busyId === pending.parcel.id)}
+            >
+              Confirmer
+            </Button>
+          </div>
+        }
+      >
+        {pending ? (
+          <form id="livreur-action-form" onSubmit={onConfirmComment} className="space-y-3">
+            {pending.action.needsDatetime ? (
+              <label className="block text-sm font-medium text-ink">
+                Reporter au
+                <input
+                  type="datetime-local"
+                  value={reportAt}
+                  onChange={(e) => setReportAt(e.target.value)}
+                  required
+                  className="mt-1.5 w-full rounded-xl border border-cream px-3 py-3 text-base outline-none ring-brand focus:ring-2"
+                />
+              </label>
+            ) : (
+              <label className="block text-sm font-medium text-ink">
+                {pending.action.commentLabel ?? "Commentaire"}
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows={3}
+                  required
+                  className="mt-1.5 w-full rounded-xl border border-cream px-3 py-2.5 text-sm outline-none ring-brand focus:ring-2"
+                  placeholder="Détail…"
+                />
+              </label>
+            )}
           </form>
-        </div>
-      ) : null}
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(inAppCall)}
+        onClose={() => setInAppCall(null)}
+        title="Appel en cours"
+        description={
+          inAppCall
+            ? `${inAppCall.code ?? inAppCall.id} · simulation (pas de VoIP)`
+            : undefined
+        }
+        size="md"
+        footer={
+          <Button
+            className="w-full"
+            onClick={() => {
+              if (!inAppCall) return;
+              notifyAction(
+                "Appel terminé",
+                `${inAppCall.code ?? inAppCall.id} · raccroché`,
+                inAppCall.id,
+              );
+              setInAppCall(null);
+            }}
+          >
+            Raccrocher
+          </Button>
+        }
+      >
+        {inAppCall ? (
+          <div className="text-center">
+            <p className="font-display text-2xl font-bold text-ink">
+              {inAppCall.recipientName}
+            </p>
+            <p className="mt-2 font-mono text-lg font-semibold text-brand">
+              {formatDisplayPhone(inAppCall.phone)}
+            </p>
+          </div>
+        ) : null}
+      </Modal>
 
       <Link
         href="/livreur/parcels"

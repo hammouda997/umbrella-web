@@ -1,55 +1,78 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PackageSearch, Ticket } from "lucide-react";
-import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { useMemo } from "react";
+import { LifeBuoy, PackageSearch } from "lucide-react";
 import {
   EmptyState,
+  ErrorBanner,
   LoadingBlock,
   PageHeader,
   Panel,
+  StatCard,
+  StatusBadge,
+  buttonClass,
 } from "@/components/ui";
-import type { DetailParcel } from "@/components/ParcelDetailTable";
+import { formatTnd, type Parcel } from "@/lib/domain";
+import { useApiQuery } from "@/lib/use-api";
+
+const STEPS = ["EN_ATTENTE", "A_ENLEVER", "AU_DEPOT", "EN_COURS", "LIVRES"] as const;
+const STEP_OF: Record<string, number> = {
+  NON_SERIEUX: 0,
+  EN_ATTENTE: 0,
+  A_ENLEVER: 1,
+  ENLEVES: 1,
+  AU_DEPOT: 2,
+  RETOUR_DEPOT: 2,
+  EN_COURS: 3,
+  A_VERIFIER: 3,
+  LIVRES: 4,
+  LIVRES_PAYES: 4,
+  ECHANGES: 4,
+  REMBOURSES: 4,
+};
+
+function progress(status: string) {
+  const step = STEP_OF[status];
+  return step === undefined ? null : Math.round(((step + 1) / STEPS.length) * 100);
+}
 
 export default function ClientPage() {
-  const { session } = useAuth();
-  const [parcels, setParcels] = useState<DetailParcel[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!session?.accessToken) return;
-    apiFetch<DetailParcel[]>("/parcels", { token: session.accessToken })
-      .then(setParcels)
-      .finally(() => setLoading(false));
-  }, [session]);
+  const { data, error, loading, reload } = useApiQuery<Parcel[]>("/parcels");
+  const parcels = useMemo(() => data ?? [], [data]);
+  const inTransit = parcels.filter((p) => ["A_ENLEVER", "ENLEVES", "AU_DEPOT", "EN_COURS", "A_VERIFIER"].includes(p.status)).length;
+  const delivered = parcels.filter((p) => p.status === "LIVRES" || p.status === "LIVRES_PAYES").length;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         title="Mes livraisons"
-        description="Suivez vos colis et ouvrez un ticket si besoin"
+        description="Suivez vos colis et contactez le support si besoin"
         actions={
-          <Link
-            href="/client/tickets"
-            className="inline-flex items-center gap-2 rounded-xl border border-cream px-3 py-2 text-sm font-semibold text-ink hover:border-brand"
-          >
-            <Ticket className="h-4 w-4" />
+          <Link href="/client/tickets" className={buttonClass("secondary")}>
+            <LifeBuoy className="h-4 w-4" aria-hidden />
             Support
           </Link>
         }
       />
 
-      {loading ? <LoadingBlock label="Chargement…" /> : null}
+      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard label="Colis" value={parcels.length} icon={PackageSearch} tone="brand" />
+        <StatCard label="En route" value={inTransit} tone="gold" />
+        <StatCard label="Livrés" value={delivered} tone="success" />
+      </div>
+
+      {loading && parcels.length === 0 ? <LoadingBlock rows={2} label="Chargement…" /> : null}
 
       {!loading && parcels.length === 0 ? (
         <EmptyState
+          icon={PackageSearch}
           title="Aucune livraison"
           description="Vos colis apparaîtront ici dès qu'un envoi vous est destiné."
           action={
-            <Link href="/track" className="text-sm font-semibold text-brand">
+            <Link href="/track" className={buttonClass("secondary")}>
               Suivre un code
             </Link>
           }
@@ -58,37 +81,47 @@ export default function ClientPage() {
 
       <ul className="space-y-3">
         {parcels.map((p) => {
-          const status =
-            STATUS_META[p.status as StatusKey]?.label ?? p.status;
+          const pct = progress(p.status);
           return (
             <li key={p.id}>
-              <Panel className="flex flex-wrap items-start justify-between gap-4">
-                <div className="flex gap-3">
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand/10 text-brand">
-                    <PackageSearch className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="font-mono text-xs font-semibold text-brand">
-                      {p.code}
+              <Panel className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs font-semibold text-brand">{p.code}</p>
+                    <p className="mt-1 font-display text-lg font-bold text-ink">
+                      {p.designation ?? p.notes ?? "Colis"}
                     </p>
-                    <p className="font-display text-lg font-bold text-ink">
-                      {status}
-                    </p>
-                    <p className="mt-1 text-sm text-ink-muted">
-                      {p.city}, {p.governorate}
-                    </p>
-                    <p className="text-xs text-ink-muted">
-                      Mis à jour{" "}
-                      {new Date(p.createdAt).toLocaleDateString("fr-TN")}
+                    <p className="text-sm text-ink-muted">
+                      {p.city}, {p.governorate} · {formatTnd(p.price)} à payer
                     </p>
                   </div>
+                  <StatusBadge status={p.status} />
                 </div>
-                <Link
-                  href={`/track?code=${encodeURIComponent(p.code ?? "")}`}
-                  className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-soft"
-                >
-                  Timeline
-                </Link>
+                {pct !== null ? (
+                  <div>
+                    <div className="h-2 overflow-hidden rounded-full bg-cream-soft" aria-hidden>
+                      <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="mt-1.5 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                      <span>Créé</span>
+                      <span>Enlevé</span>
+                      <span>Dépôt</span>
+                      <span>En route</span>
+                      <span>Livré</span>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-cream pt-3">
+                  <p className="text-xs text-ink-muted">
+                    Mis à jour le {new Date(p.updatedAt ?? p.createdAt).toLocaleDateString("fr-TN")}
+                  </p>
+                  <Link
+                    href={`/track?code=${encodeURIComponent(p.code ?? "")}`}
+                    className={buttonClass("primary", "sm")}
+                  >
+                    Voir le suivi
+                  </Link>
+                </div>
               </Panel>
             </li>
           );

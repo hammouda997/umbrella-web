@@ -179,28 +179,18 @@ export function AdminNavexDashboard({
             ? `${basePath}/retours`
             : `${basePath}/parcels?status=RETOUR_DEFINITIF`,
         },
-        ...(isSender && soldes
-          ? [
-              {
-                label: "Disponible",
-                value: formatMoney(soldes.disponible),
-                href: `${basePath}/payments`,
-              },
-            ]
-          : [
-              {
-                label: isSender ? "Volume COD" : "CA",
-                value: formatMoney(kpis.revenue).replace(/\s/g, "\u00a0"),
-                href: analyticsHref,
-              },
-            ]),
+        {
+          label: isSender ? "Volume COD" : "CA",
+          value: formatMoney(kpis.revenue).replace(/\s/g, "\u00a0"),
+          href: analyticsHref,
+        },
       ]
     : [];
 
   return (
     <div ref={root} className="space-y-7">
-      <header className="dash-reveal flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <header className="dash-reveal flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
             Umbrella Express
           </p>
@@ -211,36 +201,65 @@ export function AdminNavexDashboard({
             Bonjour {session?.user.name} — opérations du jour
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={analyticsHref}
-            className="inline-flex items-center gap-1.5 rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
-          >
-            Analytics
-            <ArrowUpRight className="h-4 w-4" />
-          </Link>
-          {isSender ? (
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-stretch lg:w-auto lg:flex-col lg:items-end">
+          {!loading && soldes ? (
             <Link
               href={`${basePath}/payments`}
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-cream bg-surface px-3.5 py-2.5 transition hover:border-brand/40 sm:max-w-sm lg:max-w-none lg:flex-none"
+            >
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                <Wallet className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="grid min-w-0 flex-1 grid-cols-2 gap-3">
+                <span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                    Solde
+                  </span>
+                  <span className="mt-0.5 block font-display text-lg font-extrabold tabular-nums leading-none text-ink">
+                    {formatMoney(soldes.disponible)}
+                  </span>
+                </span>
+                <span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                    En demande
+                  </span>
+                  <span className="mt-0.5 block font-display text-lg font-extrabold tabular-nums leading-none text-ink">
+                    {formatMoney(soldes.enDemande)}
+                  </span>
+                </span>
+              </span>
+            </Link>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2 sm:shrink-0 lg:justify-end">
+            <Link
+              href={analyticsHref}
               className="inline-flex items-center gap-1.5 rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
             >
-              <Wallet className="h-4 w-4" />
-              Paiements
+              Analytics
+              <ArrowUpRight className="h-4 w-4" />
             </Link>
-          ) : (
+            {isSender ? (
+              <Link
+                href={`${basePath}/payments`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
+              >
+                Paiements
+              </Link>
+            ) : (
+              <Link
+                href={`${basePath}/dispatch`}
+                className="rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
+              >
+                Dispatch
+              </Link>
+            )}
             <Link
-              href={`${basePath}/dispatch`}
-              className="rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
+              href={`${basePath}/nouveau`}
+              className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-soft"
             >
-              Dispatch
+              Nouveau colis
             </Link>
-          )}
-          <Link
-            href={`${basePath}/nouveau`}
-            className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-soft"
-          >
-            Nouveau colis
-          </Link>
+          </div>
         </div>
       </header>
 
@@ -255,15 +274,15 @@ export function AdminNavexDashboard({
       ) : null}
 
       {!loading && topCounters.length > 0 ? (
-        <section className="dash-reveal overflow-x-auto rounded-2xl border border-cream bg-surface">
-          <div className="flex min-w-[560px] divide-x divide-cream lg:min-w-0">
+        <section className="dash-reveal rounded-2xl border border-cream bg-surface">
+          <div className="grid grid-cols-2 divide-cream sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
             {topCounters.map((item) => (
               <Link
                 key={item.label}
                 href={item.href}
-                className="group min-w-[6.5rem] flex-1 px-4 py-5 transition hover:bg-brand/[0.03] sm:min-w-0"
+                className="group border-b border-cream px-3 py-4 transition hover:bg-brand/[0.03] sm:px-4 sm:py-5 lg:border-b-0"
               >
-                <p className="font-display text-3xl font-extrabold tabular-nums tracking-tight text-ink md:text-4xl">
+                <p className="font-display text-2xl font-extrabold tabular-nums tracking-tight text-ink sm:text-3xl md:text-4xl">
                   {item.value}
                   {item.sub ? (
                     <span className="ml-1.5 align-middle text-sm font-bold text-brand">
@@ -281,13 +300,10 @@ export function AdminNavexDashboard({
       ) : null}
 
       {!loading && !error && items.length > 0 ? (
-        <section className="dash-reveal space-y-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
-              Statuts
-            </h2>
-            <p className="text-xs text-ink-muted">Filtrer la liste</p>
-          </div>
+        <section className="dash-reveal space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+            Statuts
+          </h2>
           <StatusBoard items={items} basePath={basePath} />
         </section>
       ) : null}

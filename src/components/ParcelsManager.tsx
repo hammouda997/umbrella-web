@@ -2,18 +2,21 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BookUser, Camera, Clock3 } from "lucide-react";
+import { BookUser, Camera, Clock3, Plus } from "lucide-react";
 import {
   AddressLocationFields,
   type AddressLocationValue,
 } from "@/components/AddressLocationFields";
+import { errorText, useConfirm, useToast } from "@/components/Feedback";
 import { Modal } from "@/components/Modal";
-import { ParcelDetailTable, type DetailParcel } from "@/components/ParcelDetailTable";
+import { ParcelDetailTable } from "@/components/ParcelDetailTable";
+import { StatusFilterBar } from "@/components/StatusFilterBar";
+import { Button, ErrorBanner, PageHeader } from "@/components/ui";
 import { loadAddressBook, type SavedAddress } from "@/lib/address-book";
 import { scoreAddress } from "@/lib/address-quality";
-import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { DELIVERY_WINDOWS, type DeliveryWindowId } from "@/lib/delivery-windows";
+import type { Parcel } from "@/lib/domain";
 import { displayGovernorate } from "@/lib/normalize-text";
 import {
   RETURN_STATUSES,
@@ -21,6 +24,9 @@ import {
   type StatusKey,
 } from "@/lib/status-meta";
 import { canSeeDeliveryMode } from "@/lib/roles";
+import { useApi, useApiQuery } from "@/lib/use-api";
+
+const SENDER_EDITABLE_STATUSES = ["EN_ATTENTE", "NON_SERIEUX"];
 
 const EMPTY_ADDRESS: AddressLocationValue = {
   governorate: "",
@@ -69,13 +75,17 @@ export function ParcelsManager({
   detailBasePath?: string;
 }) {
   const { session } = useAuth();
-  const showModes = canSeeDeliveryMode(session?.user.role);
+  const role = session?.user.role;
+  const showModes = canSeeDeliveryMode(role);
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status");
-  const [parcels, setParcels] = useState<DetailParcel[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const request = useApi();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { data, error, loading, reload } = useApiQuery<Parcel[]>("/parcels");
+  const parcels = useMemo(() => data ?? [], [data]);
   const [openForm, setOpenForm] = useState(defaultOpenCreate);
-  const [editing, setEditing] = useState<DetailParcel | null>(null);
+  const [editing, setEditing] = useState<Parcel | null>(null);
   const [saving, setSaving] = useState(false);
   const [exchange, setExchange] = useState(false);
   const [allowTry, setAllowTry] = useState(false);
@@ -88,17 +98,10 @@ export function ParcelsManager({
   const [landmarkName, setLandmarkName] = useState<string | null>(null);
   const [forceWeakAddress, setForceWeakAddress] = useState(false);
 
-  async function load() {
-    if (!session?.accessToken) return;
-    const data = await apiFetch<DetailParcel[]>("/parcels", {
-      token: session.accessToken,
-    });
-    setParcels(data);
+  function canEditRow(row: Parcel) {
+    if (!canEdit) return false;
+    return role !== "EXPEDITEUR" || SENDER_EDITABLE_STATUSES.includes(row.status);
   }
-
-  useEffect(() => {
-    load().catch((e: Error) => setMessage(e.message));
-  }, [session]);
 
   useEffect(() => {
     if (openForm) setSavedAddresses(loadAddressBook());
@@ -155,7 +158,7 @@ export function ParcelsManager({
       if (name && entry.contact) name.value = entry.contact;
       if (phone && entry.phone) phone.value = entry.phone;
     }
-    setMessage(`Adresse « ${entry.label} » appliquée`);
+    toast.info(`Adresse « ${entry.label} » appliquée`);
   }
 
   function closeCreate() {
@@ -169,28 +172,27 @@ export function ParcelsManager({
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!session?.accessToken) return;
     if (!location.governorate || !location.city) {
-      setMessage("Gouvernorat et ville sont requis");
+      toast.error("Gouvernorat et ville sont requis");
       return;
     }
 
     const quality = scoreAddress(location);
     if (quality.level === "weak" && !forceWeakAddress) {
-      setMessage(
-        "Adresse trop vague — précisez rue/GPS, ou confirmez quand même ci-dessous.",
+      toast.info(
+        "Adresse trop vague",
+        "Précisez la rue ou le GPS, ou cliquez à nouveau sur « Ajouter » pour confirmer.",
       );
       setForceWeakAddress(true);
       return;
     }
 
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     const allowOpen = form.get("allowOpen") === "Oui";
 
     if (allowOpen && !liabilityAccepted) {
-      setMessage(
-        "Vous devez accepter la responsabilité (dommage / vol) pour l'essai produit.",
-      );
+      toast.error("Acceptez la responsabilité (dommage / vol) pour l'essai produit.");
       return;
     }
 
@@ -199,56 +201,40 @@ export function ParcelsManager({
       ? `${location.locality.trim()}, ${street}`
       : street;
 
-    const windowMeta = DELIVERY_WINDOWS.find((w) => w.id === deliveryWindow);
-    const noteParts = [
-      String(form.get("notes") || "").trim(),
-      windowMeta ? `Créneau: ${windowMeta.label} (${windowMeta.hint})` : "",
-      landmarkName ? `Repère photo: ${landmarkName}` : "",
-      location.lat != null && location.lng != null
-        ? `GPS: ${location.lat.toFixed(5)},${location.lng.toFixed(5)}`
-        : "",
-    ].filter(Boolean);
-
     setSaving(true);
     try {
-      await apiFetch("/parcels", {
-        method: "POST",
-        token: session.accessToken,
-        body: JSON.stringify({
-          recipientName: form.get("recipientName"),
-          phone: form.get("phone"),
-          phone2: form.get("phone2") || undefined,
-          governorate: location.governorate,
-          city: location.city,
-          address,
-          price: Number(form.get("price")),
-          articleCount: Number(form.get("articleCount") || 1),
-          designation: form.get("designation") || undefined,
-          notes: noteParts.join(" · ") || undefined,
-          mode: showModes ? form.get("mode") : "EXTERNAL",
-          allowOpen,
-          tryProduct: allowOpen,
-          liabilityAcceptedAt: allowOpen ? new Date().toISOString() : undefined,
-          isExchange: exchange,
-          exchangeNotes: exchange
-            ? String(form.get("exchangeNotes") || "")
-            : undefined,
-          paymentMode: form.get("paymentMode") || undefined,
-          parcelCount: Number(form.get("parcelCount") || 1),
-          locality: location.locality || undefined,
-          lat: location.lat ?? undefined,
-          lng: location.lng ?? undefined,
-          deliveryWindow,
-          landmarkPhotoName: landmarkName || undefined,
-          addressQuality: quality.score,
-        }),
+      const created = await request<Parcel>("/parcels", "POST", {
+        recipientName: form.get("recipientName"),
+        phone: form.get("phone"),
+        phone2: form.get("phone2") || undefined,
+        governorate: location.governorate,
+        city: location.city,
+        address,
+        price: Number(form.get("price")),
+        articleCount: Number(form.get("articleCount") || 1),
+        designation: form.get("designation") || undefined,
+        notes: String(form.get("notes") || "").trim() || undefined,
+        mode: showModes ? form.get("mode") : "EXTERNAL",
+        allowOpen,
+        tryProduct: allowOpen,
+        liabilityAcceptedAt: allowOpen ? new Date().toISOString() : undefined,
+        isExchange: exchange,
+        exchangeNotes: exchange ? String(form.get("exchangeNotes") || "") : undefined,
+        paymentMode: form.get("paymentMode") || undefined,
+        parcelCount: Number(form.get("parcelCount") || 1),
+        locality: location.locality || undefined,
+        lat: location.lat ?? undefined,
+        lng: location.lng ?? undefined,
+        deliveryWindow,
+        landmarkPhotoName: landmarkName || undefined,
+        addressQuality: quality.score,
       });
-      e.currentTarget.reset();
+      formEl.reset();
       closeCreate();
-      setMessage("Colis créé");
-      await load();
+      toast.success("Colis créé", created.code ?? undefined);
+      await reload();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Création impossible");
+      toast.error("Création impossible", errorText(err));
     } finally {
       setSaving(false);
     }
@@ -256,82 +242,77 @@ export function ParcelsManager({
 
   async function onUpdate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!session?.accessToken || !editing) return;
+    if (!editing) return;
     const form = new FormData(e.currentTarget);
     setSaving(true);
     try {
-      await apiFetch(`/parcels/${editing.id}`, {
-        method: "PATCH",
-        token: session.accessToken,
-        body: JSON.stringify({
-          recipientName: form.get("recipientName"),
-          phone: form.get("phone"),
-          address: form.get("address"),
-          price: Number(form.get("price")),
-          notes: form.get("notes") || undefined,
-        }),
+      await request(`/parcels/${editing.id}`, "PATCH", {
+        recipientName: form.get("recipientName"),
+        phone: form.get("phone"),
+        address: form.get("address"),
+        price: Number(form.get("price")),
+        notes: String(form.get("notes") || "").trim() || undefined,
       });
       closeEdit();
-      setMessage("Colis mis à jour");
-      await load();
+      toast.success("Colis mis à jour");
+      await reload();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Mise à jour impossible");
+      toast.error("Mise à jour impossible", errorText(err));
     } finally {
       setSaving(false);
     }
   }
 
-  async function onDelete(row: DetailParcel) {
-    if (!session?.accessToken || !canDelete) return;
-    if (!window.confirm(`Supprimer ${row.code ?? row.id} ?`)) return;
+  async function onDelete(row: Parcel) {
+    if (!canDelete) return;
+    const ok = await confirm({
+      title: `Supprimer ${row.code ?? `#${row.id}`} ?`,
+      description: `${row.recipientName} · ${row.city}`,
+      confirmLabel: "Supprimer",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
-      await apiFetch(`/parcels/${row.id}`, {
-        method: "DELETE",
-        token: session.accessToken,
-      });
+      await request(`/parcels/${row.id}`, "DELETE");
       closeEdit();
-      setMessage("Colis supprimé");
-      await load();
+      toast.success("Colis supprimé");
+      await reload();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Suppression impossible");
+      toast.error("Suppression impossible", errorText(err));
     }
   }
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold text-ink sm:text-3xl">
-            {heading}
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            {filtered.length} colis · {description}
-          </p>
-        </div>
-        {canCreate ? (
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(null);
-              setOpenForm(true);
-            }}
-            className="w-full rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft sm:w-auto"
-          >
-            Nouveau Pickup
-          </button>
-        ) : null}
-      </header>
+      <PageHeader
+        title={heading}
+        description={`${filtered.length} colis · ${description}`}
+        actions={
+          canCreate ? (
+            <Button
+              icon={Plus}
+              onClick={() => {
+                setEditing(null);
+                setOpenForm(true);
+              }}
+              className="w-full sm:w-auto"
+            >
+              Nouveau colis
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {message ? (
-        <p className="text-sm font-medium text-gold" role="status">
-          {message}
-        </p>
-      ) : null}
+      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
+
+      {!returnsOnly ? <StatusFilterBar parcels={parcels} /> : null}
 
       <ParcelDetailTable
         rows={filtered}
+        loading={loading && parcels.length === 0}
         detailBasePath={detailBasePath}
         reportTitle={heading}
+        canEditRow={canEdit ? canEditRow : undefined}
         onEdit={
           canEdit
             ? (row) => {
@@ -350,21 +331,18 @@ export function ParcelsManager({
         size="xl"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={closeCreate}
-              className="w-full rounded-full border border-cream px-4 py-2.5 text-sm font-semibold text-ink sm:w-auto"
-            >
+            <Button variant="secondary" onClick={closeCreate}>
               Annuler
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               form="parcel-create-form"
-              disabled={saving || (allowTry && !liabilityAccepted)}
-              className="w-full rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              icon={Plus}
+              loading={saving}
+              disabled={allowTry && !liabilityAccepted}
             >
-              {saving ? "Enregistrement…" : "+ Ajouter"}
-            </button>
+              Ajouter
+            </Button>
           </div>
         }
       >
@@ -741,36 +719,19 @@ export function ParcelsManager({
         footer={
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {canDelete && editing ? (
-              <button
-                type="button"
-                onClick={() =>
-                  onDelete(editing).catch((err: Error) =>
-                    setMessage(err.message),
-                  )
-                }
-                className="w-full rounded-full border border-brand/30 px-4 py-2.5 text-sm font-semibold text-brand sm:w-auto"
-              >
+              <Button variant="danger" onClick={() => void onDelete(editing)}>
                 Supprimer
-              </button>
+              </Button>
             ) : (
               <span />
             )}
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={closeEdit}
-                className="w-full rounded-full border border-cream px-4 py-2.5 text-sm font-semibold text-ink sm:w-auto"
-              >
+              <Button variant="secondary" onClick={closeEdit}>
                 Annuler
-              </button>
-              <button
-                type="submit"
-                form="parcel-edit-form"
-                disabled={saving}
-                className="w-full rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft disabled:opacity-50 sm:w-auto"
-              >
-                {saving ? "Enregistrement…" : "Enregistrer"}
-              </button>
+              </Button>
+              <Button type="submit" form="parcel-edit-form" loading={saving}>
+                Enregistrer
+              </Button>
             </div>
           </div>
         }

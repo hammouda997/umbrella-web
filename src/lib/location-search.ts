@@ -6,7 +6,13 @@ import {
   getCachedPlaceSearch,
   setCachedPlaceSearch,
 } from "@/lib/place-search-cache";
-import { governoratesWithCities } from "@/lib/tunisia-address";
+import { arabicForPlace } from "@/lib/place-labels-ar";
+import {
+  citiesForGovernorate,
+  governoratesWithCities,
+  resolveOfficialCity,
+} from "@/lib/tunisia-address";
+import { localitiesForCity } from "@/lib/tunisia-localities";
 
 export type AddressSuggestion = {
   id: string;
@@ -41,11 +47,13 @@ const GOV_ALIASES: Record<string, string> = {
   mahdia: "Mahdia",
   "la manouba": "La_Manouba",
   manouba: "La_Manouba",
+  manubah: "La_Manouba",
   medenine: "Medenine",
   monastir: "Monastir",
   nabeul: "Nabeul",
   sfax: "Sfax",
   "sidi bouzid": "Sidi_Bouzid",
+  "sidi bou zid": "Sidi_Bouzid",
   siliana: "Siliana",
   sousse: "Sousse",
   tataouine: "Tataouine",
@@ -80,16 +88,36 @@ export function matchGovernorateKey(raw: string): string | null {
   return null;
 }
 
+export function uniquePlaceNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of names) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    const key = normalizeSearch(trimmed);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 export function fuzzyFilterOptions(
   options: string[],
   query: string,
-  limit = 40,
+  limit = 80,
 ): string[] {
   const q = normalizeSearch(query);
   if (!q) return options.slice(0, limit);
 
   return options
-    .map((opt) => ({ opt, score: scoreMatch(opt, q) }))
+    .map((opt) => {
+      const ar = arabicForPlace(opt) ?? "";
+      return {
+        opt,
+        score: Math.max(scoreMatch(opt, q), ar ? scoreMatch(ar, q) : 0),
+      };
+    })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score || a.opt.localeCompare(b.opt, "fr"))
     .slice(0, limit)
@@ -127,6 +155,19 @@ export function searchLocalPlaces(query: string, limit = 12): AddressSuggestion[
           city,
           source: "local",
           score,
+        });
+      }
+      for (const locality of localitiesForCity(gov, city)) {
+        const locScore = scoreMatch(locality, q);
+        if (locScore < 70) continue;
+        hits.push({
+          id: `loc-${gov}-${city}-${locality}`,
+          label: `${locality}, ${city}, ${govLabel}`,
+          governorate: gov,
+          city,
+          locality,
+          source: "local",
+          score: locScore,
         });
       }
     }
@@ -169,10 +210,11 @@ function mapPhotonFeature(f: PhotonFeature, index: number): AddressSuggestion | 
   if (!governorate) return null;
 
   const city =
+    resolveOfficialCity(governorate, p.city ?? p.district ?? "") ??
     p.city ??
     p.locality ??
     p.district ??
-    governoratesWithCities[governorate]?.[0] ??
+    citiesForGovernorate(governorate)[0] ??
     displayGovernorate(governorate);
 
   const streetParts = [p.housenumber, p.street ?? p.name].filter(Boolean);
@@ -227,6 +269,117 @@ export async function searchPhotonTunisia(
   return Array.from(dedup.values()).slice(0, limit);
 }
 
+function mapNominatimHit(
+  item: {
+    place_id?: number;
+    lat?: string;
+    lon?: string;
+    display_name?: string;
+    address?: {
+      city?: string;
+      town?: string;
+      village?: string;
+      suburb?: string;
+      neighbourhood?: string;
+      hamlet?: string;
+      municipality?: string;
+      county?: string;
+      state?: string;
+      road?: string;
+      house_number?: string;
+    };
+  },
+  index: number,
+): AddressSuggestion | null {
+  const a = item.address ?? {};
+  const governorate =
+    matchGovernorateKey(a.state ?? "") ??
+    matchGovernorateKey(a.county ?? "") ??
+    matchGovernorateKey(a.city ?? "");
+  if (!governorate) return null;
+
+  const rawCity = a.city ?? a.town ?? a.municipality ?? a.county ?? "";
+  const city =
+    resolveOfficialCity(governorate, rawCity) ??
+    rawCity ??
+    citiesForGovernorate(governorate)[0] ??
+    displayGovernorate(governorate);
+
+  const locality = a.suburb ?? a.neighbourhood ?? a.village ?? a.hamlet ?? undefined;
+  const street = [a.house_number, a.road].filter(Boolean).join(" ").trim();
+  const label = [street || locality || city, city, displayGovernorate(governorate)]
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    id: `nominatim-${item.place_id ?? index}-${normalizeSearch(label)}`,
+    label,
+    governorate,
+    city,
+    locality,
+    street: street || undefined,
+    lat: item.lat ? Number(item.lat) : undefined,
+    lng: item.lon ? Number(item.lon) : undefined,
+    source: "photon",
+  };
+}
+
+export async function searchNominatimTunisia(
+  query: string,
+  limit = 8,
+  signal?: AbortSignal,
+): Promise<AddressSuggestion[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", `${q}, Tunisie`);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("countrycodes", "tn");
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("accept-language", "fr");
+
+  const res = await fetch(url.toString(), {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as unknown;
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((item, i) => mapNominatimHit(item as Parameters<typeof mapNominatimHit>[0], i))
+    .filter((x): x is AddressSuggestion => x != null)
+    .slice(0, limit);
+}
+
+export async function searchPhotonInPlace(
+  query: string,
+  governorate: string,
+  city?: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const govLabel = displayGovernorate(governorate);
+  const composed = [q, city, govLabel, "Tunisie"].filter(Boolean).join(" ");
+
+  const [photon, nominatim] = await Promise.all([
+    searchPhotonTunisia(composed, 10, signal).catch(() => [] as AddressSuggestion[]),
+    searchNominatimTunisia(composed, 8, signal).catch(() => [] as AddressSuggestion[]),
+  ]);
+
+  const hits = [...photon, ...nominatim].filter((h) => h.governorate === governorate);
+  const names = hits.flatMap((h) => {
+    if (city) {
+      return [h.locality, h.city].filter(Boolean) as string[];
+    }
+    const official = resolveOfficialCity(governorate, h.city);
+    return official ? [official] : [h.city];
+  });
+  return uniquePlaceNames(names.filter((name) => scoreMatch(name, q) >= 40)).slice(0, 16);
+}
+
 export async function reverseGeocodeTunisia(
   lat: number,
   lng: number,
@@ -263,7 +416,11 @@ export async function searchPlacesCombined(
 
   let remote: AddressSuggestion[] = [];
   try {
-    remote = await searchPhotonTunisia(query, 8, signal);
+    const [photon, nominatim] = await Promise.all([
+      searchPhotonTunisia(query, 8, signal),
+      searchNominatimTunisia(query, 6, signal).catch(() => [] as AddressSuggestion[]),
+    ]);
+    remote = [...photon, ...nominatim];
     if (remote.length > 0) setCachedPlaceSearch(query, remote);
   } catch {
     remote = cached.length > 0 ? cached : [];

@@ -1,259 +1,111 @@
-export const governoratesWithCities: Record<string, string[]> = {
-  Tunis: [
-    "Bab Bhar",
-    "Bab Souika",
-    "Carthage",
-    "Cité El Khadra",
-    "Djebel Jelloud",
-    "El Haraïria",
-    "El Kabaria",
-    "El Menzah",
-    "El Omrane",
-    "El Omrane Supérieur",
-    "El Ouardia",
-    "Ettahrir",
-    "Ezzouhour",
-    "La Goulette",
-    "La Marsa",
-    "Le Bardo",
-    "Le Kram",
-    "Medina",
-    "Sidi El Béchir",
-    "Sidi Hassine",
-    "Sijoumi",
-  ],
+import adminTree from "@/data/tunisia-admin.json";
+import { normalizeSearch } from "@/lib/normalize-text";
 
-  Ariana: [
-    "Ariana Ville",
-    "Ettadhamen",
-    "La Soukra",
-    "Kalaat El Andalous",
-    "Mnihla",
-    "Gammarth",
-    "Berges du Lac",
-  ],
+type AdminTree = Record<string, Record<string, string[]>>;
 
-  Beja: [
-    "Beja Nord",
-    "Beja Sud",
-    "Testour",
-    "Téboursouk",
-    "Zahret Medien",
-    "Zelba",
-    "Thibar",
-    "Goubellat",
-    "Majaz El Bab",
-  ],
+const TREE = adminTree as AdminTree;
 
-  "Ben_Arous": [
-    "Ben Arous",
-    "Hammam Lif",
-    "Hammam Chott",
-    "Mohamedia",
-    "Fouchana",
-    "Mornag",
-    "Boumhel",
-    "Ezzahra",
-    "Radès",
-  ],
+export const governoratesWithCities: Record<string, string[]> = Object.fromEntries(
+  Object.entries(TREE).map(([gov, cities]) => [
+    gov,
+    Object.keys(cities).sort((a, b) => a.localeCompare(b, "fr")),
+  ]),
+);
 
-  Bizerte: [
-    "Bizerte Nord",
-    "Bizerte Sud",
-    "Ras Jebel",
-    "Menzel Bourguiba",
-    "Ghar El Melh",
-    "Mateur",
-    "Sejnane",
-    "Joumine",
-    "Tinja",
-    "Menzel Jemil",
-  ],
-
-  Gabes: [
-    "Gabes Ville",
-    "Gabes Ouest",
-    "Gabes Sud",
-    "Gabes Médina",
-    "Ghannouch",
-    "Matmata",
-    "Matmata Nouvelle",
-  ],
-
-  Gafsa: [
-    "Gafsa Ville",
-    "Redeyef",
-    "Metlaoui",
-    "Gafsa Nord",
-    "Gafsa Sud",
-    "Moularès",
-    "Mdhilla",
-    "El Ksar",
-    "El Guettar",
-  ],
-
-  Jendouba: [
-    "Jendouba Nord",
-    "Jendouba Sud",
-    "Aïn Draham",
-    "Fernana",
-    "Ghardimaou",
-    "Oued Meliz",
-    "Tabarka",
-    "Balta Bou Aouane",
-  ],
-
-  Kairouan: [
-    "Kairouan Nord",
-    "Kairouan Sud",
-    "Sbikha",
-    "Nasrallah",
-    "Chebika",
-    "Haffouz",
-  ],
-
-  Kasserine: [
-    "Kasserine Nord",
-    "Kasserine Sud",
-    "Sbeitla",
-    "Sbiba",
-    "Feriana",
-    "El Ayoun",
-    "Thala",
-  ],
-
-  Kebili: [
-    "Kebili Nord",
-    "Kebili Sud",
-    "Douz Nord",
-    "Douz Sud",
-  ],
-
-  "Le_Kef": [
-    "Kef Est",
-    "Kef Ouest",
-    "Dahmani",
-    "Jerissa",
-    "Kalaat Khesba",
-    "Nebeur",
-    "Sers",
-    "Tajerouine",
-  ],
-
-  Mahdia: [
-    "Mahdia",
-    "Ksour Essef",
-    "Chebba",
-    "Bou Merzoug",
-    "Melloulech",
-    "El Jem",
-    "Ouled Chamekh",
-  ],
-
-  "La_Manouba": [
-    "Douar Hicher",
-    "Oued Ellil",
-    "Mornaguia",
-    "Borj El Amri",
-    "La Manouba",
-    "Jedaida",
-  ],
-
-  Medenine: [
-    "Medenine Ville",
-    "Zarzis",
-    "Ben Guerdane",
-    "Djerba Ajim",
-    "Djerba Midoun",
-    "Djerba Houmet Essouk",
-  ],
-
-  Monastir: [
-    "Monastir",
-    "Moknine",
-    "Ksar Hellal",
-    "Sahline",
-    "Bembla",
-    "Jammel",
-    "Beni Hassen",
-  ],
-
-  Nabeul: [
-    "Nabeul",
-    "Hammamet",
-    "Kelibia",
-    "Korba",
-    "Grombalia",
-    "Menzel Temime",
-    "Soliman",
-    "Dar Chaabane El Fehri",
-    "Takelsa",
-  ],
-
-  Sfax: [
-    "Sfax Médina",
-    "Sfax Sud",
-    "Sfax Ouest",
-    "Sakiet Ezzit",
-    "Bir Ali Ben Khelifa",
-    "Gremda",
-    "Agareb",
-    "Jebeniana",
-    "Hencha",
-  ],
-
-  "Sidi_Bouzid": [
-    "Sidi Bouzid Ville",
-    "Regueb",
-    "Meknassy",
-    "Sidi Ali Ben Aoun",
-    "Menzel Bouzaiane",
-    "Jilma",
-    "Bir El Hafey",
-  ],
-
-  Siliana: [
-    "Siliana Nord",
-    "Siliana Sud",
-    "Kesra",
-    "Makthar",
-    "El Aroussa",
-    "Rouhia",
-  ],
-
-  Sousse: [
-    "Sousse",
-    "Hammam Sousse",
-    "Kalaa Sghira",
-    "Enfidha",
-    "Hergla",
-    "Kondar",
-    "Sayada Lamta Bouhjar",
-    "Akouda",
-    "Kalâa Kebira",
-    "M'saken",
-  ],
-
-  Tataouine: [
-    "Tataouine Nord",
-    "Tataouine Sud",
-    "Remada",
-    "Bir Lahmar",
-    "Dehiba",
-    "Smar",
-  ],
-
-  Tozeur: [
-    "Tozeur",
-    "Degueche",
-    "Hazoua",
-    "Nefta",
-  ],
-
-  Zaghouan: [
-    "Zaghouan",
-    "El Fahs",
-    "Nadhour",
-    "Zriba",
-  ],
+const CITY_ALIASES: Record<string, string> = {
+  "ksour essaf": "Ksour Essef",
+  "ksour es saf": "Ksour Essef",
+  "ksour essef": "Ksour Essef",
+  "el jemem": "El Jem",
+  "el jemm": "El Jem",
+  "el jem": "El Jem",
+  "bou merzoug": "Boumerdès",
+  "bou merdes": "Boumerdès",
+  "boumerdes": "Boumerdès",
+  melloulech: "Melloulèche",
+  mellouleche: "Melloulèche",
+  "la chebba": "Chebba",
+  souassi: "Essouassi",
+  essouassi: "Essouassi",
+  hbira: "Hebira",
+  "h bira": "Hebira",
+  hebira: "Hebira",
+  ariana: "Ariana Médina",
+  "ariana ville": "Ariana Médina",
+  "ariana medina": "Ariana Médina",
+  "la soukra": "Soukra",
+  soukra: "Soukra",
+  "ben arous ville": "Ben Arous",
+  boumhel: "Bou Mhel El Bassatine",
+  "el mourouj 1": "El Mourouj",
+  "el mourouj 3": "El Mourouj",
+  rades: "Radès",
+  manouba: "La Manouba",
+  "la manouba": "La Manouba",
+  jedaida: "Jedaida",
+  sfax: "Sfax Médina",
+  "sfax ville": "Sfax Médina",
+  "sfax medina": "Sfax Médina",
+  sousse: "Sousse Médina",
+  "sousse medina": "Sousse Médina",
+  "sousse jawhara": "Sousse Jaouhara",
+  "sousse jaouhara": "Sousse Jaouhara",
+  msaken: "M'Saken",
+  "m saken": "M'Saken",
+  "kalaa kebira": "Kalaa Kebira",
+  "kalaa sghira": "Kalaa Sghira",
+  gammarth: "Soukra",
+  "berges du lac": "Soukra",
+  "le bardo": "Bardo",
+  bardo: "Bardo",
+  "el omrane": "Omrane",
+  omrane: "Omrane",
+  "el omrane superieur": "Omrane Supérieur",
+  ettahrir: "El Tahrir",
+  "el tahrir": "El Tahrir",
+  hrairia: "Hrairia",
+  "el hrairia": "Hrairia",
+  kabaria: "Kabaria",
+  "el kabaria": "Kabaria",
+  "djebel jelloud": "Jebel Jelloud",
+  "jebel jelloud": "Jebel Jelloud",
+  "houmt souk": "Houmt Souk",
+  "djerba houmet souk": "Houmt Souk",
+  "djerba houmet essouk": "Houmt Souk",
+  "djerba midoun": "Djerba Midoun",
+  midoun: "Djerba Midoun",
+  "djerba ajim": "Djerba Ajim",
+  ajim: "Djerba Ajim",
 };
+
+export function citiesForGovernorate(governorate: string): string[] {
+  return governoratesWithCities[governorate] ?? [];
+}
+
+export function resolveOfficialCity(
+  governorate: string,
+  raw: string,
+): string | null {
+  const cities = citiesForGovernorate(governorate);
+  const n = normalizeSearch(raw);
+  if (!n) return null;
+
+  const aliased = CITY_ALIASES[n];
+  if (aliased) {
+    const hit = cities.find((city) => normalizeSearch(city) === normalizeSearch(aliased));
+    if (hit) return hit;
+  }
+
+  for (const city of cities) {
+    if (normalizeSearch(city) === n) return city;
+  }
+
+  if (n.length >= 4) {
+    for (const city of cities) {
+      const cn = normalizeSearch(city);
+      if (cn.startsWith(n) || n.startsWith(cn)) return city;
+    }
+  }
+
+  return null;
+}

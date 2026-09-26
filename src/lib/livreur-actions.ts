@@ -8,7 +8,43 @@ export type LivreurAction = {
   tone: "primary" | "success" | "warn" | "danger" | "neutral";
   needsComment?: boolean;
   commentLabel?: string;
+  /** Reporté: date (+ time) picker instead of free text. */
+  needsDatetime?: boolean;
 };
+
+/** Normalize Tunisian / international phone for tel:, sms:, wa.me */
+export function normalizePhoneDigits(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("216")) return digits;
+  if (digits.startsWith("0") && digits.length >= 8) return `216${digits.slice(1)}`;
+  if (digits.length === 8) return `216${digits}`;
+  return digits;
+}
+
+export function telHref(phone: string): string {
+  const digits = normalizePhoneDigits(phone);
+  return digits ? `tel:+${digits}` : `tel:${phone}`;
+}
+
+export function smsHref(phone: string): string {
+  const digits = normalizePhoneDigits(phone);
+  return digits ? `sms:+${digits}` : `sms:${phone}`;
+}
+
+export function whatsappHref(phone: string): string {
+  const digits = normalizePhoneDigits(phone);
+  return digits ? `https://wa.me/${digits}` : `https://wa.me/`;
+}
+
+export function formatDisplayPhone(phone: string): string {
+  const digits = normalizePhoneDigits(phone);
+  if (digits.startsWith("216") && digits.length === 11) {
+    const local = digits.slice(3);
+    return `+216 ${local.slice(0, 2)} ${local.slice(2, 5)} ${local.slice(5)}`;
+  }
+  return phone;
+}
 
 /** Contextual driver actions (Navex-style pickup/delivery). */
 export function livreurActionsFor(status: string): LivreurAction[] {
@@ -76,17 +112,34 @@ export function livreurActionsFor(status: string): LivreurAction[] {
           emoji: "📅",
           status: "A_VERIFIER",
           tone: "warn",
-          needsComment: true,
-          commentLabel: "Nouvelle date",
+          needsDatetime: true,
         },
         {
           id: "bad-phone",
-          label: "Tél / adresse incorrect",
-          emoji: "⚠️",
+          label: "Téléphone incorrect",
+          emoji: "📵",
           status: "A_VERIFIER",
           tone: "danger",
           needsComment: true,
-          commentLabel: "Explication",
+          commentLabel: "Détail téléphone",
+        },
+        {
+          id: "bad-address",
+          label: "Adresse incorrecte",
+          emoji: "📍",
+          status: "A_VERIFIER",
+          tone: "danger",
+          needsComment: true,
+          commentLabel: "Détail adresse",
+        },
+        {
+          id: "blocked",
+          label: "Livreur bloqué",
+          emoji: "🛑",
+          status: "NON_SERIEUX",
+          tone: "danger",
+          needsComment: true,
+          commentLabel: "Motif du blocage",
         },
         {
           id: "exchange",

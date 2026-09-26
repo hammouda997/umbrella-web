@@ -1,5 +1,8 @@
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 
+export { DASHBOARD_STATUS_KEYS } from "@/lib/dashboard-statuses";
+
+/** Full status list for counts / analytics. */
 export const STATUS_ORDER: StatusKey[] = [
   "NON_SERIEUX",
   "EN_ATTENTE",
@@ -24,13 +27,6 @@ export function colisStatusHref(basePath: string, status: StatusKey) {
   return `${basePath}/parcels?status=${encodeURIComponent(status)}`;
 }
 
-export function colisNavChildren(basePath: string) {
-  return [
-    { href: `${basePath}/parcels`, label: "Tous les colis" },
-    { href: `${basePath}/nouveau`, label: "Ajouter colis" },
-    ...STATUS_ORDER.map((key) => ({
-      href: colisStatusHref(basePath, key),
-      label: `${STATUS_META[key].emoji} ${STATUS_META[key].label}`,
-    })),
-  ];
+export function statusLabel(status: string): string {
+  return STATUS_META[status as StatusKey]?.label ?? status;
 }

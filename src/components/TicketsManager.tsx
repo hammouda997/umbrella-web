@@ -1,18 +1,44 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { FormEvent, useMemo, useState } from "react";
+import { CheckCircle2, LifeBuoy, Plus, XCircle } from "lucide-react";
+import { errorText, useToast } from "@/components/Feedback";
+import { Modal } from "@/components/Modal";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorBanner,
+  PageHeader,
+  SearchInput,
+  SegmentedTabs,
+  SelectField,
+  TableCard,
+  TextAreaField,
+  TextField,
+  tableClass,
+  tdClass,
+  theadClass,
+  thClass,
+  trClass,
+  type BadgeTone,
+} from "@/components/ui";
+import type { Parcel, Ticket, TicketStatus } from "@/lib/domain";
+import { useApi, useApiQuery } from "@/lib/use-api";
 
-type Ticket = {
-  id: number;
-  title: string;
-  description: string | null;
-  status: "EN_COURS" | "RESOLU" | "FERME";
-  createdAt: string;
-  parcel?: { id: number; code: string | null } | null;
-  createdBy?: { id: number; name: string; email: string };
+const STATUS_LABEL: Record<TicketStatus, string> = {
+  EN_COURS: "En cours",
+  RESOLU: "Résolu",
+  FERME: "Fermé",
 };
+
+const STATUS_TONE: Record<TicketStatus, BadgeTone> = {
+  EN_COURS: "warning",
+  RESOLU: "success",
+  FERME: "neutral",
+};
+
+type Filter = "ALL" | TicketStatus;
 
 export function TicketsManager({
   canCreate = true,
@@ -21,153 +47,294 @@ export function TicketsManager({
   canCreate?: boolean;
   canResolve?: boolean;
 }) {
-  const { session } = useAuth();
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const request = useApi();
+  const toast = useToast();
+  const { data, error, loading, reload } = useApiQuery<Ticket[]>("/tickets");
+  const { data: parcelData } = useApiQuery<Parcel[]>(canCreate ? "/parcels" : null);
+  const tickets = useMemo(() => data ?? [], [data]);
+  const parcels = useMemo(() => parcelData ?? [], [parcelData]);
+  const [filter, setFilter] = useState<Filter>("ALL");
+  const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Ticket | null>(null);
 
-  async function load() {
-    if (!session?.accessToken) return;
-    const data = await apiFetch<Ticket[]>("/tickets", {
-      token: session.accessToken,
-    });
-    setTickets(data);
-  }
+  const counts = useMemo(
+    () => ({
+      ALL: tickets.length,
+      EN_COURS: tickets.filter((t) => t.status === "EN_COURS").length,
+      RESOLU: tickets.filter((t) => t.status === "RESOLU").length,
+      FERME: tickets.filter((t) => t.status === "FERME").length,
+    }),
+    [tickets],
+  );
 
-  useEffect(() => {
-    load().catch((e: Error) => setMessage(e.message));
-  }, [session]);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tickets.filter(
+      (t) =>
+        (filter === "ALL" || t.status === filter) &&
+        (!q ||
+          [t.title, t.description, t.parcel?.code, t.createdBy?.name]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)),
+    );
+  }, [tickets, filter, query]);
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!session?.accessToken) return;
     const form = new FormData(e.currentTarget);
-    await apiFetch("/tickets", {
-      method: "POST",
-      token: session.accessToken,
-      body: JSON.stringify({
-        title: form.get("title"),
-        description: form.get("description") || undefined,
-        parcelId: form.get("parcelId")
-          ? Number(form.get("parcelId"))
-          : undefined,
-      }),
-    });
-    e.currentTarget.reset();
-    setMessage("Ticket créé");
-    await load();
+    const parcelId = Number(form.get("parcelId"));
+    setSaving(true);
+    try {
+      const ticket = await request<Ticket>("/tickets", "POST", {
+        title: String(form.get("title") ?? "").trim(),
+        description: String(form.get("description") ?? "").trim() || undefined,
+        parcelId: parcelId || undefined,
+      });
+      setCreating(false);
+      toast.success("Ticket ouvert", `#${ticket.id} · ${ticket.title}`);
+      await reload();
+    } catch (err) {
+      toast.error("Ticket non créé", errorText(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function setStatus(id: number, status: Ticket["status"]) {
-    if (!session?.accessToken) return;
-    await apiFetch(`/tickets/${id}/status`, {
-      method: "PATCH",
-      token: session.accessToken,
-      body: JSON.stringify({ status }),
-    });
-    setMessage(`Ticket #${id} → ${status}`);
-    await load();
+  async function setStatus(ticket: Ticket, status: TicketStatus) {
+    setBusyId(ticket.id);
+    try {
+      await request(`/tickets/${ticket.id}/status`, "PATCH", { status });
+      toast.success(`Ticket #${ticket.id} ${STATUS_LABEL[status].toLowerCase()}`);
+      setSelected(null);
+      await reload();
+    } catch (err) {
+      toast.error("Mise à jour impossible", errorText(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function actions(ticket: Ticket) {
+    const busy = busyId === ticket.id;
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        {canResolve && ticket.status === "EN_COURS" ? (
+          <Button
+            size="sm"
+            variant="success"
+            icon={CheckCircle2}
+            loading={busy}
+            onClick={() => void setStatus(ticket, "RESOLU")}
+          >
+            Résoudre
+          </Button>
+        ) : null}
+        {ticket.status !== "FERME" ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={XCircle}
+            disabled={busy}
+            onClick={() => void setStatus(ticket, "FERME")}
+          >
+            Fermer
+          </Button>
+        ) : null}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-display text-3xl font-extrabold text-ink">Tickets</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Support colis · {tickets.length} ticket(s)
-        </p>
-      </header>
+      <PageHeader
+        title="Support"
+        description={`${counts.EN_COURS} ticket(s) en cours · ${tickets.length} au total`}
+        actions={
+          canCreate ? (
+            <Button icon={Plus} onClick={() => setCreating(true)}>
+              Nouveau ticket
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {canCreate ? (
-        <form
-          onSubmit={onCreate}
-          className="grid gap-3 rounded-xl border border-cream bg-surface p-5 shadow-soft md:grid-cols-4"
-        >
-          <input
-            name="title"
-            required
-            placeholder="Sujet"
-            className="rounded-lg border border-cream-soft px-3 py-2.5 text-sm outline-none focus:border-brand md:col-span-2"
-          />
-          <input
-            name="parcelId"
-            type="number"
-            placeholder="ID colis (opt.)"
-            className="rounded-lg border border-cream-soft px-3 py-2.5 text-sm outline-none focus:border-brand"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft"
-          >
-            Ouvrir
-          </button>
-          <textarea
+      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
+
+      <TableCard
+        toolbar={
+          <>
+            <SegmentedTabs<Filter>
+              label="Filtrer par statut"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "ALL", label: "Tous", count: counts.ALL },
+                { value: "EN_COURS", label: "En cours", count: counts.EN_COURS },
+                { value: "RESOLU", label: "Résolus", count: counts.RESOLU },
+                { value: "FERME", label: "Fermés", count: counts.FERME },
+              ]}
+            />
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Sujet, colis, auteur…"
+              className="w-full md:w-64"
+            />
+          </>
+        }
+      >
+        {loading && tickets.length === 0 ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
+            ))}
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="p-6">
+            <EmptyState
+              icon={LifeBuoy}
+              title="Aucun ticket"
+              description={
+                query || filter !== "ALL"
+                  ? "Aucun ticket ne correspond à ce filtre."
+                  : "Ouvrez un ticket si un colis pose problème."
+              }
+            />
+          </div>
+        ) : (
+          <table className={tableClass}>
+            <thead className={theadClass}>
+              <tr>
+                <th className={thClass}>Ticket</th>
+                <th className={thClass}>Colis</th>
+                <th className={thClass}>Statut</th>
+                <th className={`${thClass} hidden md:table-cell`}>Ouvert le</th>
+                <th className={`${thClass} text-right`}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((t) => (
+                <tr key={t.id} className={trClass}>
+                  <td className={tdClass}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(t)}
+                      className="text-left"
+                    >
+                      <p className="font-semibold text-ink hover:text-brand">
+                        #{t.id} · {t.title}
+                      </p>
+                      {t.description ? (
+                        <p className="max-w-md truncate text-xs text-ink-muted">{t.description}</p>
+                      ) : null}
+                      {t.createdBy ? (
+                        <p className="text-[11px] text-ink-muted">par {t.createdBy.name}</p>
+                      ) : null}
+                    </button>
+                  </td>
+                  <td className={`${tdClass} font-mono text-xs text-ink-muted`}>
+                    {t.parcel?.code ?? "—"}
+                  </td>
+                  <td className={tdClass}>
+                    <Badge tone={STATUS_TONE[t.status]} dot>
+                      {STATUS_LABEL[t.status]}
+                    </Badge>
+                  </td>
+                  <td className={`${tdClass} hidden whitespace-nowrap text-ink-muted md:table-cell`}>
+                    {new Date(t.createdAt).toLocaleDateString("fr-TN")}
+                  </td>
+                  <td className={tdClass}>{actions(t)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+
+      <Modal
+        open={creating}
+        onClose={() => setCreating(false)}
+        title="Nouveau ticket"
+        description="Décrivez le problème, l'équipe support vous répond rapidement."
+        size="md"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setCreating(false)}>
+              Annuler
+            </Button>
+            <Button type="submit" form="ticket-create-form" loading={saving}>
+              Ouvrir le ticket
+            </Button>
+          </div>
+        }
+      >
+        <form id="ticket-create-form" onSubmit={onCreate} className="space-y-4">
+          <TextField name="title" label="Sujet" required minLength={3} maxLength={120} />
+          <SelectField name="parcelId" label="Colis concerné" defaultValue="">
+            <option value="">Aucun colis précis</option>
+            {parcels.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code ?? `#${p.id}`} · {p.recipientName}
+              </option>
+            ))}
+          </SelectField>
+          <TextAreaField
             name="description"
-            rows={2}
-            placeholder="Description"
-            className="rounded-lg border border-cream-soft px-3 py-2.5 text-sm outline-none focus:border-brand md:col-span-4"
+            label="Description"
+            rows={4}
+            maxLength={1000}
+            placeholder="Que s'est-il passé ?"
           />
         </form>
-      ) : null}
+      </Modal>
 
-      {message ? <p className="text-sm font-medium text-gold">{message}</p> : null}
-
-      <div className="overflow-hidden rounded-xl border border-cream bg-surface shadow-soft">
-        <table className="min-w-full text-sm">
-          <thead className="bg-cream-soft/70 text-left text-[11px] uppercase tracking-wide text-ink-muted">
-            <tr>
-              <th className="px-4 py-3">#</th>
-              <th className="px-4 py-3">Sujet</th>
-              <th className="px-4 py-3">Colis</th>
-              <th className="px-4 py-3">Statut</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tickets.map((t) => (
-              <tr key={t.id} className="border-t border-cream-soft">
-                <td className="px-4 py-3 font-semibold">{t.id}</td>
-                <td className="px-4 py-3">
-                  <p className="font-medium text-ink">{t.title}</p>
-                  <p className="text-xs text-ink-muted">{t.description}</p>
-                </td>
-                <td className="px-4 py-3 text-ink-muted">
-                  {t.parcel?.code ?? "—"}
-                </td>
-                <td className="px-4 py-3">{t.status}</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    {canResolve && t.status === "EN_COURS" ? (
-                      <button
-                        type="button"
-                        onClick={() => setStatus(t.id, "RESOLU")}
-                        className="rounded-md bg-[#2f7d5b] px-2 py-1 text-xs font-semibold text-white"
-                      >
-                        Résoudre
-                      </button>
-                    ) : null}
-                    {t.status !== "FERME" ? (
-                      <button
-                        type="button"
-                        onClick={() => setStatus(t.id, "FERME")}
-                        className="rounded-md border border-cream px-2 py-1 text-xs font-semibold"
-                      >
-                        Fermer
-                      </button>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {tickets.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">
-                  Aucun ticket
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+      <Modal
+        open={Boolean(selected)}
+        onClose={() => setSelected(null)}
+        title={selected ? `Ticket #${selected.id}` : ""}
+        description={selected?.title}
+        size="md"
+        footer={selected ? actions(selected) : undefined}
+      >
+        {selected ? (
+          <dl className="space-y-4 text-sm">
+            <div className="flex items-center gap-2">
+              <Badge tone={STATUS_TONE[selected.status]} dot>
+                {STATUS_LABEL[selected.status]}
+              </Badge>
+              {selected.parcel?.code ? <Badge tone="info">{selected.parcel.code}</Badge> : null}
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                Description
+              </dt>
+              <dd className="mt-1 whitespace-pre-line text-ink">
+                {selected.description ?? "Aucune description"}
+              </dd>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  Auteur
+                </dt>
+                <dd className="mt-1 text-ink">{selected.createdBy?.name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  Ouvert le
+                </dt>
+                <dd className="mt-1 text-ink">
+                  {new Date(selected.createdAt).toLocaleString("fr-TN")}
+                </dd>
+              </div>
+            </div>
+          </dl>
+        ) : null}
+      </Modal>
     </div>
   );
 }

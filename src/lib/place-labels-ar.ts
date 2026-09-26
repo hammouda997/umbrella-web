@@ -1,5 +1,9 @@
-/** French key → Arabic display label for governorates / common cities */
+import generated from "@/data/tunisia-ar.json";
+
+const GENERATED = generated as Record<string, string>;
+
 export const arabicPlaceLabels: Record<string, string> = {
+  ...GENERATED,
   Tunis: "تونس",
   Ariana: "أريانة",
   Beja: "باجة",
@@ -28,24 +32,23 @@ export const arabicPlaceLabels: Record<string, string> = {
   Tataouine: "تطاوين",
   Tozeur: "توزر",
   Zaghouan: "زغوان",
-  "La Marsa": "المرسى",
-  Carthage: "قرطاج",
-  "Le Bardo": "باردو",
-  "La Goulette": "حلق الوادي",
-  Hammamet: "الحمامات",
   "Ariana Ville": "أريانة المدينة",
-  Ezzahra: "الزهراء",
-  "Hammam Lif": "حمام الأنف",
   "La Soukra": "سكرة",
-  Raoued: "رواد",
-  "Djerba Midoun": "جربة ميدون",
-  "Djerba Houmet Essouk": "جربة حومة السوق",
+  "Le Bardo": "باردو",
 };
 
 export function bilingualLabel(french: string, governorateKey?: string): string {
+  const display = french.replace(/_/g, " ");
   const ar =
     arabicPlaceLabels[french] ??
-    (governorateKey ? arabicPlaceLabels[governorateKey] : undefined);
-  if (!ar) return french.replace(/_/g, " ");
-  return `${french.replace(/_/g, " ")} · ${ar}`;
+    arabicPlaceLabels[display] ??
+    (governorateKey && display === governorateKey.replace(/_/g, " ")
+      ? arabicPlaceLabels[governorateKey]
+      : undefined);
+  if (!ar) return display;
+  return `${display} · ${ar}`;
+}
+
+export function arabicForPlace(french: string): string | undefined {
+  return arabicPlaceLabels[french] ?? arabicPlaceLabels[french.replace(/_/g, " ")];
 }

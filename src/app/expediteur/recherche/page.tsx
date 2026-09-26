@@ -1,156 +1,94 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { useMemo, useState } from "react";
+import { ParcelDetailTable } from "@/components/ParcelDetailTable";
+import { Button, ErrorBanner, PageHeader, Panel, SelectField } from "@/components/ui";
+import type { Parcel } from "@/lib/domain";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
-import { EmptyState, LoadingBlock, PageHeader, Panel } from "@/components/ui";
-import type { DetailParcel } from "@/components/ParcelDetailTable";
+import { useApiQuery } from "@/lib/use-api";
 
 const STATUS_OPTIONS = Object.keys(STATUS_META) as StatusKey[];
 
 export default function ExpediteurRecherchePage() {
-  const { session } = useAuth();
-  const [parcels, setParcels] = useState<DetailParcel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
+  const { data, error, loading, reload } = useApiQuery<Parcel[]>("/parcels");
+  const parcels = useMemo(() => data ?? [], [data]);
   const [status, setStatus] = useState("");
   const [city, setCity] = useState("");
-
-  useEffect(() => {
-    if (!session?.accessToken) return;
-    apiFetch<DetailParcel[]>("/parcels", { token: session.accessToken })
-      .then(setParcels)
-      .finally(() => setLoading(false));
-  }, [session]);
+  const [period, setPeriod] = useState("");
 
   const cities = useMemo(
-    () => Array.from(new Set(parcels.map((p) => p.city))).sort(),
+    () => Array.from(new Set(parcels.map((p) => p.city))).sort((a, b) => a.localeCompare(b, "fr")),
     [parcels],
   );
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return parcels.filter((p) => {
-      if (status && p.status !== status) return false;
-      if (city && p.city !== city) return false;
-      if (!needle) return true;
-      const blob = [
-        p.code,
-        p.recipientName,
-        p.phone,
-        p.address,
-        p.city,
-        p.notes,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return blob.includes(needle);
-    });
-  }, [parcels, q, status, city]);
+    const since = period ? Date.now() - Number(period) * 86_400_000 : 0;
+    return parcels.filter(
+      (p) =>
+        (!status || p.status === status) &&
+        (!city || p.city === city) &&
+        (!since || new Date(p.createdAt).getTime() >= since),
+    );
+  }, [parcels, status, city, period]);
+
+  const hasFilters = Boolean(status || city || period);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Rechercher un colis"
-        description="Filtres par code, destinataire, statut et ville"
+        title="Recherche avancée"
+        description="Filtrez vos colis par statut, ville et période, puis exportez le résultat"
       />
 
+      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
+
       <Panel>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="block text-sm">
-            <span className="text-ink-muted">Recherche</span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Code, nom, téléphone…"
-              className="mt-1 w-full rounded-xl border border-cream-soft px-3 py-2.5 outline-none ring-brand focus:ring-2"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="text-ink-muted">Statut</span>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-cream-soft px-3 py-2.5 outline-none ring-brand focus:ring-2"
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SelectField label="Statut" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Tous</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_META[s].label}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Ville" value={city} onChange={(e) => setCity(e.target.value)}>
+            <option value="">Toutes</option>
+            {cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Période" value={period} onChange={(e) => setPeriod(e.target.value)}>
+            <option value="">Tout l’historique</option>
+            <option value="1">Dernières 24 h</option>
+            <option value="7">7 derniers jours</option>
+            <option value="30">30 derniers jours</option>
+          </SelectField>
+          <div className="flex items-end">
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={!hasFilters}
+              onClick={() => {
+                setStatus("");
+                setCity("");
+                setPeriod("");
+              }}
             >
-              <option value="">Tous</option>
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_META[s].label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="text-ink-muted">Ville</span>
-            <select
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-cream-soft px-3 py-2.5 outline-none ring-brand focus:ring-2"
-            >
-              <option value="">Toutes</option>
-              {cities.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
+              Réinitialiser
+            </Button>
+          </div>
         </div>
       </Panel>
 
-      {loading ? <LoadingBlock /> : null}
-
-      {!loading && filtered.length === 0 ? (
-        <EmptyState
-          title="Aucun résultat"
-          description="Élargissez vos filtres ou créez un nouveau colis."
-        />
-      ) : null}
-
-      {!loading && filtered.length > 0 ? (
-        <div className="overflow-hidden rounded-xl border border-cream bg-surface shadow-soft">
-          <table className="min-w-full text-sm">
-            <thead className="bg-cream-soft/60 text-left text-[11px] uppercase tracking-wide text-ink-muted">
-              <tr>
-                <th className="px-4 py-3">Code</th>
-                <th className="px-4 py-3">Destinataire</th>
-                <th className="px-4 py-3">Statut</th>
-                <th className="px-4 py-3">Ville</th>
-                <th className="px-4 py-3">Prix</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => (
-                <tr
-                  key={p.id}
-                  className="border-t border-cream-soft hover:bg-brand/[0.03]"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/expediteur/parcels/${p.id}`}
-                      className="font-semibold text-brand hover:underline"
-                    >
-                      {p.code}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ink">{p.recipientName}</p>
-                    <p className="text-xs text-ink-muted">{p.phone}</p>
-                  </td>
-                  <td className="px-4 py-3 text-ink">
-                    {STATUS_META[p.status as StatusKey]?.label ?? p.status}
-                  </td>
-                  <td className="px-4 py-3 text-ink-muted">{p.city}</td>
-                  <td className="px-4 py-3 font-medium">{p.price} TND</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
+      <ParcelDetailTable
+        rows={filtered}
+        loading={loading && parcels.length === 0}
+        detailBasePath="/expediteur/parcels"
+        reportTitle="Recherche colis"
+      />
     </div>
   );
 }

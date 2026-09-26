@@ -9,16 +9,34 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiFetch, type AuthSession } from "@/lib/api";
-import { mockSignIn } from "@/lib/mock-data";
+import { apiFetch, setTokenRefresher, type AuthSession } from "@/lib/api";
+import type { UserRow } from "@/lib/domain";
+import { resetMockDb } from "@/lib/mock-db";
 import { USE_MOCK } from "@/lib/mock-mode";
 import { PORTAL_BY_ROLE } from "@/lib/roles";
+
+export type SignUpInput = {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+
+export type ProfileInput = {
+  name?: string;
+  email?: string;
+  phone?: string;
+};
 
 type AuthContextValue = {
   session: AuthSession | null;
   signIn: (email: string, password: string) => Promise<AuthSession>;
+  signUp: (input: SignUpInput) => Promise<AuthSession>;
   signOut: () => Promise<void>;
   refresh: () => Promise<AuthSession | null>;
+  updateProfile: (input: ProfileInput) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  resetDemo: () => void;
   isMock: boolean;
 };
 
@@ -74,14 +92,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return normalized;
   }, []);
 
+  const clearSession = useCallback(() => {
+    persist(null);
+    setSession(null);
+  }, []);
+
   const signIn = useCallback(
     async (email: string, password: string) => {
-      if (USE_MOCK) {
-        return applySession(mockSignIn(email, password));
-      }
       const data = await apiFetch<AuthSession>("/auth/signin", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      return applySession(data);
+    },
+    [applySession],
+  );
+
+  const signUp = useCallback(
+    async (input: SignUpInput) => {
+      const data = await apiFetch<AuthSession>("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ ...input, role: "EXPEDITEUR" }),
       });
       return applySession(data);
     },
@@ -91,7 +122,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const current = readSession();
     if (!current?.refreshToken) return null;
-    if (USE_MOCK) return applySession(current);
     try {
       const data = await apiFetch<AuthSession>("/auth/refresh", {
         method: "POST",
@@ -99,26 +129,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return applySession(data);
     } catch {
-      persist(null);
-      setSession(null);
+      clearSession();
       return null;
     }
-  }, [applySession]);
+  }, [applySession, clearSession]);
+
+  useEffect(() => {
+    setTokenRefresher(async () => (await refresh())?.accessToken ?? null);
+    return () => setTokenRefresher(null);
+  }, [refresh]);
 
   const signOut = useCallback(async () => {
     const current = readSession();
-    if (!USE_MOCK && current?.accessToken) {
+    if (current?.accessToken) {
       try {
-        await apiFetch("/auth/logout", {
-          method: "POST",
-          token: current.accessToken,
-        });
+        await apiFetch("/auth/logout", { method: "POST", token: current.accessToken });
       } catch {
-        // clear local anyway
+        // local session is cleared regardless
       }
     }
-    persist(null);
-    setSession(null);
+    clearSession();
+  }, [clearSession]);
+
+  const updateProfile = useCallback(
+    async (input: ProfileInput) => {
+      const current = readSession();
+      if (!current) throw new Error("Session expirée");
+      const user = await apiFetch<UserRow>("/users/me", {
+        method: "PATCH",
+        token: current.accessToken,
+        body: JSON.stringify(input),
+      });
+      applySession({
+        ...current,
+        user: { ...current.user, name: user.name, email: user.email, phone: user.phone },
+      });
+    },
+    [applySession],
+  );
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const current = readSession();
+    if (!current) throw new Error("Session expirée");
+    await apiFetch("/users/me/password", {
+      method: "PATCH",
+      token: current.accessToken,
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  }, []);
+
+  const resetDemo = useCallback(() => {
+    if (!USE_MOCK) return;
+    resetMockDb();
   }, []);
 
   useEffect(() => {
@@ -126,8 +188,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const value = useMemo(
-    () => ({ session, signIn, signOut, refresh, isMock: USE_MOCK }),
-    [session, signIn, signOut, refresh],
+    () => ({
+      session,
+      signIn,
+      signUp,
+      signOut,
+      refresh,
+      updateProfile,
+      changePassword,
+      resetDemo,
+      isMock: USE_MOCK,
+    }),
+    [session, signIn, signUp, signOut, refresh, updateProfile, changePassword, resetDemo],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
