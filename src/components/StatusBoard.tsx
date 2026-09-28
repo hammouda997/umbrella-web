@@ -58,9 +58,13 @@ export function StatusBoard({
     <nav
       ref={root}
       aria-label="Statuts colis"
-      className="rounded-2xl border border-cream bg-surface"
+      className="rounded-2xl border border-cream bg-surface p-1.5"
     >
-      <ul className="flex gap-1 overflow-x-auto overscroll-x-contain scroll-smooth px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:gap-0.5 sm:overflow-visible sm:px-1.5 sm:py-1.5 sm:snap-none md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9">
+      {/* Mobile: 3×3 grille. Desktop: wider strip. Never horizontal scroll. */}
+      <ul
+        className="m-0 grid list-none grid-cols-3 gap-1 p-0 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9"
+        style={{ display: "grid" }}
+      >
         {visible.map((item) => {
           const meta = STATUS_META[item.key as StatusKey];
           const href = `${basePath}/parcels?status=${encodeURIComponent(item.key)}`;
@@ -71,27 +75,28 @@ export function StatusBoard({
           const ink = meta?.ink ?? "#1A1414";
 
           return (
-            <li key={item.key} className="snap-start w-[8.5rem] shrink-0 sm:w-auto">
+            <li key={item.key} className="min-w-0">
               <Link
                 href={href}
                 className={cn(
-                  "status-card flex h-11 items-center gap-2 rounded-xl px-2 pr-2.5 transition sm:h-auto sm:gap-2.5 sm:px-2.5 sm:py-2",
+                  "status-card flex h-full min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-center transition",
+                  "md:min-h-0 md:flex-row md:items-center md:justify-start md:gap-2 md:px-2.5 md:py-2 md:text-left",
                   "hover:bg-brand/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
                   empty && "opacity-50",
                 )}
               >
                 <span
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm sm:h-9 sm:w-9 sm:text-base"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm md:h-9 md:w-9 md:text-base"
                   style={{ backgroundColor: color, color: ink }}
                   aria-hidden
                 >
                   {emoji}
                 </span>
-                <span className="min-w-0">
-                  <span className="block font-display text-base font-extrabold leading-none tabular-nums text-brand sm:text-lg">
+                <span className="min-w-0 w-full md:w-auto">
+                  <span className="block font-display text-base font-extrabold leading-none tabular-nums text-brand md:text-lg">
                     {item.count}
                   </span>
-                  <span className="mt-0.5 block truncate text-[10px] font-semibold leading-tight text-ink sm:text-[11px]">
+                  <span className="mt-0.5 block truncate text-[10px] font-semibold leading-tight text-ink md:text-[11px]">
                     {label}
                   </span>
                 </span>

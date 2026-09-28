@@ -56,11 +56,11 @@ export function DashboardHome({
 
       {loading ? (
         <div className="rounded-2xl border border-cream bg-surface p-1.5">
-          <div className="flex gap-1 overflow-hidden sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9">
+          <div className="grid grid-cols-3 gap-1 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9">
             {Array.from({ length: 9 }).map((_, i) => (
               <div
                 key={i}
-                className="h-11 w-[8.5rem] shrink-0 animate-pulse rounded-xl bg-cream-soft/80 sm:w-auto"
+                className="h-16 animate-pulse rounded-xl bg-cream-soft/80 md:h-11"
               />
             ))}
           </div>
