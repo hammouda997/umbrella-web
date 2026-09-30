@@ -60,16 +60,12 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
   async function onSave(e: FormEvent) {
     e.preventDefault();
     if (!draft) return;
-    if (draft.lat == null || draft.lng == null) {
-      toast.error("Placez le centre de la zone sur la carte");
-      return;
-    }
     const body = {
       name: draft.name.trim(),
       governorate: draft.governorate || undefined,
-      centerLat: draft.lat,
-      centerLng: draft.lng,
-      radiusKm: draft.radiusKm,
+      centerLat: draft.lat ?? undefined,
+      centerLng: draft.lng ?? undefined,
+      radiusKm: draft.radiusKm || undefined,
     };
     setSaving(true);
     try {
@@ -208,7 +204,7 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
         open={Boolean(draft)}
         onClose={() => setDraft(null)}
         title={draft?.id ? "Modifier la zone" : "Nouvelle zone"}
-        description="Cliquez sur la carte pour placer le centre de la zone"
+        description="Nommez la zone (ex. Zone A). Carte optionnelle pour le rayon."
         size="lg"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -238,7 +234,6 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
                 min={1}
                 max={500}
                 step={1}
-                required
                 value={draft.radiusKm}
                 onChange={(e) => setDraft({ ...draft, radiusKm: Number(e.target.value) })}
               />
@@ -261,10 +256,10 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
               onPick={({ lat, lng }) => setDraft((d) => (d ? { ...d, lat, lng } : d))}
             />
             <p className="text-xs text-ink-muted">
-              Centre :{" "}
+              Centre (optionnel) :{" "}
               {draft.lat != null && draft.lng != null
                 ? `${draft.lat.toFixed(5)}, ${draft.lng.toFixed(5)}`
-                : "non défini"}
+                : "non défini — zone nominale uniquement"}
             </p>
           </form>
         ) : null}

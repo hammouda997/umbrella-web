@@ -11,12 +11,15 @@ import { errorText, useConfirm, useToast } from "@/components/Feedback";
 import { Modal } from "@/components/Modal";
 import { ParcelDetailTable } from "@/components/ParcelDetailTable";
 import { StatusFilterBar } from "@/components/StatusFilterBar";
+import { ZoneField } from "@/components/ZoneField";
 import { Button, ErrorBanner, PageHeader } from "@/components/ui";
 import { loadAddressBook, type SavedAddress } from "@/lib/address-book";
 import { scoreAddress } from "@/lib/address-quality";
 import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
 import { DELIVERY_WINDOWS, type DeliveryWindowId } from "@/lib/delivery-windows";
-import type { Parcel } from "@/lib/domain";
+import type { Parcel, Zone } from "@/lib/domain";
+import { USE_MOCK } from "@/lib/mock-mode";
 import { displayGovernorate } from "@/lib/normalize-text";
 import {
   RETURN_STATUSES,
@@ -25,6 +28,7 @@ import {
 } from "@/lib/status-meta";
 import { canSeeDeliveryMode } from "@/lib/roles";
 import { useApi, useApiQuery } from "@/lib/use-api";
+import { upsertZone } from "@/lib/zone-book";
 
 const SENDER_EDITABLE_STATUSES = ["EN_ATTENTE", "NON_SERIEUX"];
 
@@ -97,6 +101,8 @@ export function ParcelsManager({
   const [landmarkPreview, setLandmarkPreview] = useState<string | null>(null);
   const [landmarkName, setLandmarkName] = useState<string | null>(null);
   const [forceWeakAddress, setForceWeakAddress] = useState(false);
+  const [zoneName, setZoneName] = useState<string | null>(null);
+  const [editZoneName, setEditZoneName] = useState<string | null>(null);
 
   function canEditRow(row: Parcel) {
     if (!canEdit) return false;
@@ -137,6 +143,25 @@ export function ParcelsManager({
     setLandmarkPreview(null);
     setLandmarkName(null);
     setForceWeakAddress(false);
+    setZoneName(null);
+  }
+
+  async function resolveZonePayload(name: string | null) {
+    if (!name?.trim()) return { zoneName: null as string | null, zoneId: null as number | null };
+    const trimmed = name.trim();
+    upsertZone({ name: trimmed });
+    if (USE_MOCK) return { zoneName: trimmed, zoneId: null as number | null };
+    try {
+      const list = await apiFetch<Zone[]>("/zones", { token: session?.accessToken });
+      const hit = list.find(
+        (z) => z.name.localeCompare(trimmed, "fr", { sensitivity: "base" }) === 0,
+      );
+      if (hit) return { zoneName: trimmed, zoneId: hit.id };
+      const created = await request<Zone>("/zones", "POST", { name: trimmed });
+      return { zoneName: trimmed, zoneId: created.id };
+    } catch {
+      return { zoneName: trimmed, zoneId: null as number | null };
+    }
   }
 
   function applySavedAddress(entry: SavedAddress) {
@@ -203,6 +228,7 @@ export function ParcelsManager({
 
     setSaving(true);
     try {
+      const zonePayload = await resolveZonePayload(zoneName);
       const created = await request<Parcel>("/parcels", "POST", {
         recipientName: form.get("recipientName"),
         phone: form.get("phone"),
@@ -228,6 +254,9 @@ export function ParcelsManager({
         deliveryWindow,
         landmarkPhotoName: landmarkName || undefined,
         addressQuality: quality.score,
+        ...(zonePayload.zoneId != null
+          ? { zoneId: zonePayload.zoneId }
+          : { zoneName: zonePayload.zoneName ?? undefined }),
       });
       formEl.reset();
       closeCreate();
@@ -246,12 +275,16 @@ export function ParcelsManager({
     const form = new FormData(e.currentTarget);
     setSaving(true);
     try {
+      const zonePayload = await resolveZonePayload(editZoneName);
       await request(`/parcels/${editing.id}`, "PATCH", {
         recipientName: form.get("recipientName"),
         phone: form.get("phone"),
         address: form.get("address"),
         price: Number(form.get("price")),
         notes: String(form.get("notes") || "").trim() || undefined,
+        ...(zonePayload.zoneId != null
+          ? { zoneId: zonePayload.zoneId }
+          : { zoneName: zonePayload.zoneName }),
       });
       closeEdit();
       toast.success("Colis mis à jour");
@@ -317,6 +350,7 @@ export function ParcelsManager({
           canEdit
             ? (row) => {
                 setOpenForm(false);
+                setEditZoneName(row.zone?.name ?? null);
                 setEditing(row);
               }
             : undefined
@@ -422,6 +456,12 @@ export function ParcelsManager({
                 </div>
               </div>
             ) : null}
+            <ZoneField
+              value={zoneName}
+              onChange={setZoneName}
+              canManage
+              fieldClass={fieldClass}
+            />
             <AddressLocationFields
               value={location}
               onChange={(next) => {
@@ -793,6 +833,14 @@ export function ParcelsManager({
                 name="notes"
                 defaultValue={editing.notes ?? ""}
                 className={fieldClass}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <ZoneField
+                value={editZoneName}
+                onChange={setEditZoneName}
+                canManage
+                fieldClass={fieldClass}
               />
             </div>
           </form>

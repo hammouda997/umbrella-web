@@ -323,6 +323,32 @@ function applyParcelFields(target: MockParcel, dto: Record<string, unknown>) {
     target.zoneId = zone?.id ?? null;
     target.zone = zone ? { id: zone.id, name: zone.name } : null;
   }
+  if (dto.zoneName !== undefined) {
+    const name = str(dto.zoneName);
+    if (!name) {
+      target.zoneId = null;
+      target.zone = null;
+    } else {
+      const store = db();
+      let zone = store.zones.find(
+        (z) => z.name.localeCompare(name, "fr", { sensitivity: "base" }) === 0,
+      );
+      if (!zone) {
+        zone = {
+          id: nextId(store.zones),
+          name,
+          governorate: null,
+          centerLat: null,
+          centerLng: null,
+          radiusKm: null,
+          isActive: true,
+        };
+        store.zones.push(zone);
+      }
+      target.zoneId = zone.id;
+      target.zone = { id: zone.id, name: zone.name };
+    }
+  }
 }
 
 function createParcel(actor: Actor, dto: Record<string, unknown>) {
@@ -983,7 +1009,7 @@ const ROUTES: Route[] = [
   {
     method: "POST",
     pattern: /^\/zones$/,
-    roles: STAFF,
+    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR"],
     handler: ({ body }) => {
       const zone: MockZone = {
         id: nextId(db().zones),
@@ -1003,7 +1029,7 @@ const ROUTES: Route[] = [
   {
     method: "PATCH",
     pattern: /^\/zones\/(\d+)$/,
-    roles: STAFF,
+    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR"],
     handler: ({ params, body }) => {
       const zone = db().zones.find((z) => z.id === Number(params[0]));
       if (!zone) throw new MockHttpError(404, "Zone introuvable");

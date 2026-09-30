@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDown,
@@ -88,6 +88,7 @@ export function ParcelDetailTable({
             r.governorate,
             r.notes,
             r.designation,
+            r.zone?.name,
             STATUS_META[r.status as StatusKey]?.label ?? r.status,
             String(r.price),
           ]
@@ -96,9 +97,23 @@ export function ParcelDetailTable({
             .includes(q),
         )
       : [...rows];
-    list.sort((a, b) => (sortDir === "asc" ? 1 : -1) * compare(a, b, sortKey));
+    list.sort((a, b) => {
+      const za = a.zone?.name?.trim() || "\uffff";
+      const zb = b.zone?.name?.trim() || "\uffff";
+      const byZone = za.localeCompare(zb, "fr", { sensitivity: "base" });
+      if (byZone !== 0) return byZone;
+      return (sortDir === "asc" ? 1 : -1) * compare(a, b, sortKey);
+    });
     return list;
   }, [rows, query, sortKey, sortDir]);
+
+  function zoneKey(row: Parcel) {
+    return row.zone?.id ?? row.zoneId ?? "none";
+  }
+
+  function zoneLabel(row: Parcel) {
+    return row.zone?.name?.trim() || "Sans zone";
+  }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -233,11 +248,27 @@ export function ParcelDetailTable({
           setQuery(value);
           setPage(1);
         }}
-        placeholder="Code, nom, téléphone, ville…"
+        placeholder="Code, nom, zone, téléphone…"
         className="w-full md:w-72"
       />
     </>
   );
+
+  function zoneHeader(row: Parcel, index: number, list: Parcel[]) {
+    const prev = index > 0 ? list[index - 1] : null;
+    if (prev && zoneKey(prev) === zoneKey(row)) return null;
+    const count = filtered.filter((r) => zoneKey(r) === zoneKey(row)).length;
+    return (
+      <div className="flex items-center justify-between gap-2 border-b border-cream/80 bg-cream-soft/40 px-4 py-2">
+        <p className="text-xs font-bold uppercase tracking-[0.1em] text-ink">
+          {zoneLabel(row)}
+        </p>
+        <span className="text-[11px] font-semibold text-ink-muted">
+          {count} colis
+        </span>
+      </div>
+    );
+  }
 
   const footer = (
     <div className="flex flex-col gap-3 text-xs text-ink-muted sm:flex-row sm:items-center sm:justify-between">
@@ -296,22 +327,25 @@ export function ParcelDetailTable({
         </div>
       ) : (
         <>
-          <ul className="divide-y divide-cream/70 md:hidden">
-            {pageRows.map((row) => (
-              <li key={row.id} className="space-y-2 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    {codeCell(row)}
-                    <p className="truncate font-semibold text-ink">{row.recipientName}</p>
-                    <p className="truncate text-xs text-ink-muted">
-                      {row.city}, {row.governorate} · {row.phone}
-                    </p>
+          <ul className="md:hidden">
+            {pageRows.map((row, index) => (
+              <li key={row.id}>
+                {zoneHeader(row, index, pageRows)}
+                <div className="space-y-2 border-b border-cream/70 px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      {codeCell(row)}
+                      <p className="truncate font-semibold text-ink">{row.recipientName}</p>
+                      <p className="truncate text-xs text-ink-muted">
+                        {row.city}, {row.governorate} · {row.phone}
+                      </p>
+                    </div>
+                    <StatusBadge status={row.status} />
                   </div>
-                  <StatusBadge status={row.status} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-bold text-ink">{formatTnd(row.price)}</p>
-                  {rowActions(row)}
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-ink">{formatTnd(row.price)}</p>
+                    {rowActions(row)}
+                  </div>
                 </div>
               </li>
             ))}
@@ -330,38 +364,58 @@ export function ParcelDetailTable({
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((row) => (
-                <tr key={row.id} className={trClass}>
-                  <td className={tdClass}>
-                    {codeCell(row)}
-                    {showModes ? (
-                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
-                        {row.mode}
-                      </p>
+              {pageRows.map((row, index) => {
+                const showZone =
+                  index === 0 || zoneKey(pageRows[index - 1]!) !== zoneKey(row);
+                const zoneCount = filtered.filter((r) => zoneKey(r) === zoneKey(row)).length;
+                return (
+                  <Fragment key={row.id}>
+                    {showZone ? (
+                      <tr className="bg-cream-soft/50">
+                        <td
+                          colSpan={7}
+                          className="border-b border-cream px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-ink"
+                        >
+                          {zoneLabel(row)}
+                          <span className="ml-2 font-semibold normal-case tracking-normal text-ink-muted">
+                            · {zoneCount} colis
+                          </span>
+                        </td>
+                      </tr>
                     ) : null}
-                  </td>
-                  <td className={tdClass}>
-                    <p className="font-semibold text-ink">{row.recipientName}</p>
-                    <p className="text-xs text-ink-muted">{row.phone}</p>
-                    <p className="max-w-xs truncate text-xs text-ink-muted">
-                      {row.address}, {row.city} · {row.governorate}
-                    </p>
-                  </td>
-                  <td className={tdClass}>
-                    <StatusBadge status={row.status} />
-                  </td>
-                  <td className={cn(tdClass, "whitespace-nowrap text-right font-semibold text-ink")}>
-                    {formatTnd(row.price)}
-                  </td>
-                  <td className={cn(tdClass, "whitespace-nowrap text-ink-muted")}>
-                    {formatDate(row.createdAt)}
-                  </td>
-                  <td className={cn(tdClass, "max-w-[12rem] truncate text-ink")}>
-                    {row.designation ?? row.notes ?? "—"}
-                  </td>
-                  <td className={tdClass}>{rowActions(row)}</td>
-                </tr>
-              ))}
+                    <tr className={trClass}>
+                      <td className={tdClass}>
+                        {codeCell(row)}
+                        {showModes ? (
+                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                            {row.mode}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className={tdClass}>
+                        <p className="font-semibold text-ink">{row.recipientName}</p>
+                        <p className="text-xs text-ink-muted">{row.phone}</p>
+                        <p className="max-w-xs truncate text-xs text-ink-muted">
+                          {row.address}, {row.city} · {row.governorate}
+                        </p>
+                      </td>
+                      <td className={tdClass}>
+                        <StatusBadge status={row.status} />
+                      </td>
+                      <td className={cn(tdClass, "whitespace-nowrap text-right font-semibold text-ink")}>
+                        {formatTnd(row.price)}
+                      </td>
+                      <td className={cn(tdClass, "whitespace-nowrap text-ink-muted")}>
+                        {formatDate(row.createdAt)}
+                      </td>
+                      <td className={cn(tdClass, "max-w-[12rem] truncate text-ink")}>
+                        {row.designation ?? row.notes ?? "—"}
+                      </td>
+                      <td className={tdClass}>{rowActions(row)}</td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </>
