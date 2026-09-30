@@ -1,0 +1,66 @@
+"use client";
+
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { SERVICES } from "@/components/landing/landing-data";
+
+export function LandingServices() {
+  return (
+    <section
+      id="services"
+      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-[#EFE8E0] px-5 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10"
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.28]"
+        aria-hidden
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, rgba(153,18,17,0.1) 1px, transparent 0)",
+          backgroundSize: "26px 26px",
+        }}
+      />
+
+      <div className="relative mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col">
+        <header className="mx-auto w-full max-w-xl shrink-0 text-center lg:mx-0 lg:text-left">
+          <p className="reveal text-[10px] font-semibold uppercase tracking-[0.24em] text-[#991211]/75 sm:text-[11px]">
+            / Services
+          </p>
+          <h2 className="reveal mt-1.5 font-display text-[clamp(1.55rem,3.6vw,2.35rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-black sm:mt-2">
+            Tout le last-mile,
+            <span className="mt-0.5 block text-[#991211]">une seule console</span>
+          </h2>
+          <p className="reveal mx-auto mt-2 max-w-md text-[13px] leading-snug text-black/55 sm:text-[14px] lg:mx-0">
+            Du pickup au versement COD — le même pipeline pour votre boutique.
+          </p>
+        </header>
+
+        <ul className="services-list mt-5 grid min-h-0 flex-1 grid-cols-1 gap-x-8 gap-y-0 overflow-hidden border-t border-black/[0.08] text-center sm:mt-6 sm:grid-cols-2 sm:text-left lg:grid-cols-3">
+          {SERVICES.map((service) => (
+            <li
+              key={service.n}
+              className="service-row flex flex-col border-b border-black/[0.08] py-3.5 sm:py-4"
+            >
+              <span className="font-display text-[11px] font-bold tracking-[0.14em] text-[#986A36]">
+                {service.n}
+              </span>
+              <h3 className="mt-2 font-display text-[16px] font-semibold tracking-tight text-black sm:text-[17px]">
+                {service.title}
+              </h3>
+              <p className="mt-1 text-[12px] leading-snug text-black/50 sm:text-[13px]">
+                {service.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+
+        <Link
+          href="/tarifs"
+          className="reveal magnet mx-auto mt-4 inline-flex w-fit shrink-0 items-center gap-2 border-b border-[#991211] pb-0.5 text-[13px] font-semibold text-[#991211] transition hover:gap-3 sm:mt-5 sm:text-[14px] lg:mx-0"
+        >
+          Voir les tarifs
+          <ArrowUpRight className="h-4 w-4" aria-hidden />
+        </Link>
+      </div>
+    </section>
+  );
+}

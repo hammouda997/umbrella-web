@@ -45,10 +45,15 @@ html.dark {
   color-scheme: dark;
 }
 
+html {
+  overflow-x: clip;
+}
+
 body {
   color: var(--color-ink);
   background: var(--color-page);
-  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: clip;
 }
 
 html.dark body,
@@ -91,46 +96,95 @@ html.dark textarea {
   color: #ffffff;
 }
 
-.landing .hero-brand {
-  overflow: hidden;
+.portal-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 
-.landing .hero-brand .char {
-  display: inline-block;
-  will-change: transform, opacity;
+.portal-sidebar-scroll::-webkit-scrollbar {
+  width: 5px;
 }
 
-.landing .feat-item {
-  transition:
-    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.25s ease,
-    box-shadow 0.35s ease;
+.portal-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.landing .feat-item:hover {
-  transform: translateY(-4px);
-  border-color: color-mix(in srgb, var(--color-brand) 35%, var(--color-border));
-  box-shadow: var(--shadow-soft);
+.portal-sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
 }
 
-.landing .step-icon {
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+.portal-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.35);
 }
 
-.landing .step-card:hover .step-icon {
-  transform: scale(1.06);
+.landing {
+  color: #0a0a0a;
+  background: #ffffff;
+}
+
+.landing .hero-line-mask {
+  margin-bottom: -0.12em;
+}
+
+.landing .hero-word,
+.landing .gap-line-inner {
+  will-change: transform;
+}
+
+.landing .hero-van {
+  will-change: transform;
+}
+
+.landing .hero-progress-bar {
+  animation: hero-progress 7.5s ease-in-out infinite alternate;
+}
+
+@keyframes hero-progress {
+  from {
+    transform: translateX(-40%);
+  }
+  to {
+    transform: translateX(140%);
+  }
 }
 
 .landing .marquee-band {
   cursor: default;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .landing .feat-item,
-  .landing .step-icon {
-    transition: none;
+@keyframes landing-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
   }
-  .landing .feat-item:hover {
-    transform: none;
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* Two identical sequences in the track → -50% is a seamless seam. Always runs. */
+.landing .marquee-track {
+  animation: landing-marquee 36s linear infinite;
+}
+
+.landing .case-media img {
+  will-change: transform;
+}
+
+.landing .progress-bar {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing .progress-bar {
+    display: none;
+  }
+
+  .landing .hero-progress-bar {
+    animation: none;
+  }
+
+  .landing .marquee-track {
+    animation: none;
   }
 }
