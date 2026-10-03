@@ -2,12 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   Box,
   CalendarDays,
+  ChevronDown,
   ChevronRight,
   CircleCheck,
   Clock,
@@ -23,19 +25,75 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { HeroVanScene } from "@/components/landing/HeroVanScene";
 import { cn } from "@/lib/cn";
+import { type OpsKpi, type OpsKpiTone } from "@/lib/ops-status-kpis";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { SortableTh, useTableSort } from "@/lib/table-sort";
 
-export type OpsKpi = {
-  label: string;
-  value: string;
-  href: string;
-  icon: "package" | "clock" | "truck" | "check" | "return" | "coins" | "alert";
-  delta?: string;
-  deltaTone?: "up" | "down" | "flat";
-  accent: string;
-  glow: string;
+export type { OpsKpi };
+
+type PerfPeriod = "today" | "week" | "month" | "custom";
+
+type PerfParcel = {
+  status: string;
+  createdAt: string;
+  price: string | number;
 };
+
+const PERIOD_LABELS: Record<PerfPeriod, string> = {
+  today: "Aujourd'hui",
+  week: "Semaine",
+  month: "Mois",
+  custom: "Personnalisé",
+};
+
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function periodRange(
+  period: PerfPeriod,
+  customFrom: string,
+  customTo: string,
+): { from: Date; to: Date } {
+  const now = new Date();
+  if (period === "today") {
+    return { from: startOfDay(now), to: endOfDay(now) };
+  }
+  if (period === "week") {
+    const from = startOfDay(now);
+    from.setDate(from.getDate() - 6);
+    return { from, to: endOfDay(now) };
+  }
+  if (period === "month") {
+    const from = startOfDay(now);
+    from.setDate(1);
+    return { from, to: endOfDay(now) };
+  }
+  const from = customFrom
+    ? startOfDay(new Date(`${customFrom}T00:00:00`))
+    : startOfDay(now);
+  const to = customTo
+    ? endOfDay(new Date(`${customTo}T00:00:00`))
+    : endOfDay(now);
+  return {
+    from: from.getTime() <= to.getTime() ? from : to,
+    to: from.getTime() <= to.getTime() ? to : from,
+  };
+}
+
+function isDeliveredStatus(status: string) {
+  return status === "LIVRES" || status === "LIVRES_PAYES";
+}
 
 type DayPoint = {
   date: string;
@@ -52,6 +110,24 @@ type RecentParcel = {
   price: string | number;
   createdAt: string;
 };
+
+type RecentSortKey =
+  | "code"
+  | "recipientName"
+  | "city"
+  | "status"
+  | "price"
+  | "createdAt";
+
+const RECENT_SORT = {
+  code: (p: RecentParcel) => p.code ?? "",
+  recipientName: (p: RecentParcel) => p.recipientName,
+  city: (p: RecentParcel) => p.city,
+  status: (p: RecentParcel) =>
+    STATUS_META[p.status as StatusKey]?.label ?? p.status,
+  price: (p: RecentParcel) => Number(p.price),
+  createdAt: (p: RecentParcel) => p.createdAt,
+} as const;
 
 function formatMoney(n: number) {
   return new Intl.NumberFormat("fr-TN", {
@@ -189,64 +265,98 @@ const ICON_MAP: Record<OpsKpi["icon"], LucideIcon> = {
   alert: Clock,
 };
 
-const KPI_THEME: Record<
-  OpsKpi["icon"],
-  {
-    border: string;
-    glow: string;
-    wash: string;
-    badge: string;
-    watermark: string;
-  }
-> = {
-  package: {
+type KpiTheme = {
+  border: string;
+  glow: string;
+  wash: string;
+  badge: string;
+  watermark: string;
+};
+
+const KPI_TONE_THEME: Record<OpsKpiTone, KpiTheme> = {
+  brand: {
     border: "border-[#E11D48]/40",
     glow: "shadow-[0_0_18px_rgba(225,29,72,0.22)]",
     wash: "bg-[#E11D48]/[0.12]",
     badge: "bg-[#E11D48]",
     watermark: "text-[#E11D48]",
   },
-  clock: {
+  green: {
     border: "border-[#00875A]/45",
     glow: "shadow-[0_0_18px_rgba(0,135,90,0.2)]",
     wash: "bg-[#00875A]/[0.12]",
     badge: "bg-[#00875A]",
     watermark: "text-[#00875A]",
   },
-  truck: {
+  sky: {
+    border: "border-[#0EA5E9]/45",
+    glow: "shadow-[0_0_18px_rgba(14,165,233,0.22)]",
+    wash: "bg-[#0EA5E9]/[0.12]",
+    badge: "bg-[#0EA5E9]",
+    watermark: "text-[#0EA5E9]",
+  },
+  blue: {
     border: "border-[#0065FF]/45",
     glow: "shadow-[0_0_18px_rgba(0,101,255,0.2)]",
     wash: "bg-[#0065FF]/[0.12]",
     badge: "bg-[#0065FF]",
     watermark: "text-[#0065FF]",
   },
-  check: {
+  rose: {
+    border: "border-[#F43F5E]/45",
+    glow: "shadow-[0_0_18px_rgba(244,63,94,0.22)]",
+    wash: "bg-[#F43F5E]/[0.12]",
+    badge: "bg-[#F43F5E]",
+    watermark: "text-[#F43F5E]",
+  },
+  violet: {
     border: "border-[#6554C0]/45",
     glow: "shadow-[0_0_18px_rgba(101,84,192,0.22)]",
     wash: "bg-[#6554C0]/[0.12]",
     badge: "bg-[#6554C0]",
     watermark: "text-[#6554C0]",
   },
-  return: {
+  teal: {
+    border: "border-[#14B8A6]/45",
+    glow: "shadow-[0_0_18px_rgba(20,184,166,0.22)]",
+    wash: "bg-[#14B8A6]/[0.12]",
+    badge: "bg-[#14B8A6]",
+    watermark: "text-[#14B8A6]",
+  },
+  amber: {
+    border: "border-[#F59E0B]/45",
+    glow: "shadow-[0_0_18px_rgba(245,158,11,0.2)]",
+    wash: "bg-[#F59E0B]/[0.12]",
+    badge: "bg-[#F59E0B]",
+    watermark: "text-[#F59E0B]",
+  },
+  orange: {
     border: "border-[#FFAB00]/45",
     glow: "shadow-[0_0_18px_rgba(255,171,0,0.2)]",
     wash: "bg-[#FFAB00]/[0.12]",
     badge: "bg-[#FFAB00]",
     watermark: "text-[#FFAB00]",
   },
-  coins: {
-    border: "border-[#FFAB00]/40",
-    glow: "shadow-[0_0_16px_rgba(255,171,0,0.16)]",
-    wash: "bg-[#FFAB00]/[0.1]",
-    badge: "bg-[#FFAB00]",
-    watermark: "text-[#FFAB00]",
+  slate: {
+    border: "border-[#64748B]/45",
+    glow: "shadow-[0_0_18px_rgba(100,116,139,0.2)]",
+    wash: "bg-[#64748B]/[0.12]",
+    badge: "bg-[#64748B]",
+    watermark: "text-[#64748B]",
   },
-  alert: {
-    border: "border-[#E11D48]/50",
-    glow: "shadow-[0_0_18px_rgba(225,29,72,0.28)]",
-    wash: "bg-[#E11D48]/[0.14]",
-    badge: "bg-[#E11D48]",
-    watermark: "text-[#E11D48]",
+  gold: {
+    border: "border-[#986A36]/45",
+    glow: "shadow-[0_0_18px_rgba(152,106,54,0.2)]",
+    wash: "bg-[#986A36]/[0.12]",
+    badge: "bg-[#986A36]",
+    watermark: "text-[#986A36]",
+  },
+  pink: {
+    border: "border-[#EC4899]/45",
+    glow: "shadow-[0_0_18px_rgba(236,72,153,0.2)]",
+    wash: "bg-[#EC4899]/[0.12]",
+    badge: "bg-[#EC4899]",
+    watermark: "text-[#EC4899]",
   },
 };
 
@@ -258,8 +368,8 @@ function OpsKpiCard({
   className?: string;
 }) {
   const Icon = ICON_MAP[kpi.icon];
-  const theme = KPI_THEME[kpi.icon];
-  const tone =
+  const theme = KPI_TONE_THEME[kpi.tone];
+  const deltaTone =
     kpi.deltaTone === "down"
       ? "text-rose-400"
       : kpi.deltaTone === "flat"
@@ -300,7 +410,9 @@ function OpsKpiCard({
           </p>
           {kpi.delta ? (
             <p className="mt-1.5 text-[12px] leading-tight lg:col-start-2 lg:row-start-3 lg:text-[11px]">
-              <span className={`inline-flex items-center gap-0.5 font-semibold ${tone}`}>
+              <span
+                className={`inline-flex items-center gap-0.5 font-semibold ${deltaTone}`}
+              >
                 {kpi.deltaTone === "down" ? (
                   <ArrowDownRight className="h-3.5 w-3.5" strokeWidth={2.5} />
                 ) : kpi.deltaTone === "up" ? (
@@ -324,12 +436,14 @@ type OpsDashboardProps = {
   firstName: string;
   subtitle: string;
   kpis: OpsKpi[];
-  extraKpis?: OpsKpi[];
   revenue: number;
+  /** Cash balance held by the user (e.g. livreur), shown in the hero. */
+  solde?: number | null;
   inProgress: number;
   delivered: number;
   deliveryRate: number;
-  lateCount: number;
+  /** Full parcel list for period-filtered Performance metrics. */
+  performanceParcels?: PerfParcel[];
   last7Days: DayPoint[];
   recent: RecentParcel[];
   returns: RecentParcel[];
@@ -348,11 +462,8 @@ export function OpsDashboardBoard({
   firstName,
   subtitle,
   kpis,
-  revenue,
-  inProgress,
-  delivered,
-  deliveryRate,
-  lateCount,
+  solde = null,
+  performanceParcels = [],
   last7Days,
   recent,
   returns,
@@ -372,6 +483,72 @@ export function OpsDashboardBoard({
   const settingsHref = `${basePath}/settings`;
   const searchHref = `${basePath}/scanner`;
   const isLivreur = basePath.startsWith("/livreur");
+
+  const [perfPeriod, setPerfPeriod] = useState<PerfPeriod>("week");
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [customFrom, setCustomFrom] = useState(() =>
+    startOfDay(now).toISOString().slice(0, 10),
+  );
+  const [customTo, setCustomTo] = useState(() =>
+    endOfDay(now).toISOString().slice(0, 10),
+  );
+  const periodMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!periodOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!periodMenuRef.current?.contains(event.target as Node)) {
+        setPeriodOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPeriodOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [periodOpen]);
+
+  const perfStats = useMemo(() => {
+    const { from, to } = periodRange(perfPeriod, customFrom, customTo);
+    const source =
+      performanceParcels.length > 0
+        ? performanceParcels
+        : recent.map((p) => ({
+            status: p.status,
+            createdAt: p.createdAt,
+            price: p.price,
+          }));
+    const inRange = source.filter((p) => {
+      const at = new Date(p.createdAt).getTime();
+      return at >= from.getTime() && at <= to.getTime();
+    });
+    const total = inRange.length;
+    const deliveredCount = inRange.filter((p) =>
+      isDeliveredStatus(p.status),
+    ).length;
+    const rate = total ? Math.round((deliveredCount / total) * 100) : 0;
+    const periodRevenue = inRange.reduce(
+      (sum, p) => sum + Number(p.price || 0),
+      0,
+    );
+    return { total, deliveredCount, rate, periodRevenue };
+  }, [customFrom, customTo, perfPeriod, performanceParcels, recent]);
+
+  const {
+    sorted: recentSorted,
+    sortKey: recentSortKey,
+    sortDir: recentSortDir,
+    toggleSort: toggleRecentSort,
+  } = useTableSort<RecentParcel, RecentSortKey>(
+    recent,
+    RECENT_SORT,
+    "createdAt",
+    "desc",
+  );
 
   const shortcuts: {
     href: string;
@@ -496,6 +673,13 @@ export function OpsDashboardBoard({
             icon: CreditCard,
           },
           {
+            href: `${basePath}/users`,
+            label: "Utilisateurs",
+            hint: "Comptes et rôles",
+            tone: "bg-[#6554C0]",
+            icon: Users,
+          },
+          {
             href: retoursHref,
             label: "Retours",
             hint: "À traiter",
@@ -514,51 +698,42 @@ export function OpsDashboardBoard({
     ? "Voir les colis à livrer"
     : "Ajouter un colis en un clic";
 
-  const rowKpis: OpsKpi[] = [
-    ...kpis,
-    {
-      label: "Colis en retard",
-      value: String(lateCount),
-      href: `${parcelsHref}?status=EN_COURS`,
-      icon: "alert",
-      accent: "bg-[#3a1a1f] text-[#fb7185]",
-      glow: "shadow-[0_0_32px_rgba(225,29,72,0.14)]",
-      delta: lateCount > 0 ? `+${lateCount}` : "=",
-      deltaTone: lateCount > 0 ? "up" : "flat",
-    },
-  ];
-
   return (
     <div className="ops-board -mx-3 -mt-2 space-y-3 bg-ops-page px-3 pb-3 pt-1 text-ops-ink md:-mx-4 md:px-4 lg:-mx-5 lg:space-y-3 lg:px-5 lg:pb-2 lg:pt-0">
-      <section className="relative overflow-hidden rounded-2xl border border-ops-card bg-ops-surface">
+      <section className="relative min-h-[168px] overflow-hidden rounded-2xl border border-ops-card bg-ops-surface sm:min-h-[180px]">
         <div className="pointer-events-none absolute inset-0" aria-hidden>
-          <Image
-            src="/assets/hero-bg.jpg"
-            alt=""
-            fill
-            priority
-            className="object-cover object-[70%_center] opacity-40"
-            sizes="100vw"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-ops-page via-ops-page/85 to-ops-page/30" />
+          <div className="absolute inset-0 bg-gradient-to-br from-ops-page via-ops-surface to-[#2a1518]" />
+          <HeroVanScene variant="portal" />
+          <div className="absolute inset-0 bg-gradient-to-r from-ops-page from-[42%] via-ops-page/95 via-[68%] to-ops-page/15 sm:from-[28%] sm:via-ops-page/88 sm:via-[55%] sm:to-ops-page/10" />
         </div>
-        <div className="relative z-10 flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-end sm:justify-between lg:px-6 lg:py-5">
-          <div className="min-w-0">
-            <h1 className="font-display text-[1.5rem] font-extrabold tracking-tight lg:text-[1.75rem]">
+        <div className="relative z-10 flex min-h-[168px] flex-col gap-4 px-4 py-4 sm:min-h-[180px] sm:flex-row sm:items-end sm:justify-between lg:px-6 lg:py-5">
+          <div className="relative z-10 min-w-0 max-w-[min(100%,18.5rem)] sm:max-w-md">
+            <h1 className="font-display text-[1.5rem] font-extrabold tracking-tight text-ops-ink drop-shadow-[0_1px_8px_rgba(0,0,0,0.55)] lg:text-[1.75rem]">
               Bonjour{firstName ? ` ${firstName}` : ""}
             </h1>
-            <p className="mt-1 text-[15px] text-ops-ink/70 lg:text-sm">{subtitle}</p>
-            <p className="mt-2 text-[13px] capitalize text-ops-ink/50">
-              <span className="inline-flex items-center gap-1.5">
-                <CalendarDays className="h-4 w-4" aria-hidden />
-                {formatGreetingDate(now)}
-              </span>
-              <span className="mx-2 text-ops-ink/25">·</span>
-              <span className="inline-flex items-center gap-1.5">
-                <Clock className="h-4 w-4" aria-hidden />
-                {formatGreetingTime(now)}
-              </span>
-            </p>
+            <p className="mt-1 text-[15px] text-ops-ink/85 lg:text-sm">{subtitle}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {solde != null ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-700/25 bg-emerald-50 px-3 py-1.5 text-[13px] font-semibold text-emerald-800 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  <Coins className="h-4 w-4 shrink-0" aria-hidden />
+                  Solde
+                  <span className="font-display text-[15px] font-extrabold tabular-nums text-emerald-950 dark:text-white">
+                    {formatMoney(solde)}
+                  </span>
+                </span>
+              ) : null}
+              <p className="text-[13px] capitalize text-ops-ink/65">
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4" aria-hidden />
+                  {formatGreetingDate(now)}
+                </span>
+                <span className="mx-2 text-ops-ink/25">·</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-4 w-4" aria-hidden />
+                  {formatGreetingTime(now)}
+                </span>
+              </p>
+            </div>
           </div>
           <Link
             href={primaryHref}
@@ -596,9 +771,9 @@ export function OpsDashboardBoard({
         </Link>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-6">
-        {rowKpis.map((kpi) => (
-          <OpsKpiCard key={kpi.label} kpi={kpi} />
+      <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-8">
+        {kpis.map((kpi) => (
+          <OpsKpiCard key={`${kpi.label}-${kpi.href}`} kpi={kpi} />
         ))}
       </section>
 
@@ -685,48 +860,92 @@ export function OpsDashboardBoard({
             </section>
 
             <section className="flex h-full flex-col rounded-2xl border border-ops-card bg-ops-surface p-3.5 shadow-ops lg:col-span-4">
-              <h2 className="shrink-0 text-[17px] font-semibold text-ops-ink lg:text-[15px]">
-                Chiffres clés
-              </h2>
-              <ul className="mt-2.5 flex flex-1 flex-col justify-between gap-2.5">
-                <li className="flex items-center gap-2.5">
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
-                    <Box className="h-4 w-4" strokeWidth={2.25} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block font-display text-base font-extrabold tabular-nums text-ops-ink">
-                      {formatMoney(revenue)}
-                    </span>
-                    <span className="text-[11px] text-ops-ink/45">
-                      Volume des colis
-                    </span>
-                  </span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white">
-                    <Truck className="h-4 w-4" strokeWidth={2.25} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block font-display text-base font-extrabold tabular-nums text-ops-ink">
-                      {inProgress}
-                    </span>
-                    <span className="text-[11px] text-ops-ink/45">En cours</span>
-                  </span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white">
-                    <CircleCheck className="h-4 w-4" strokeWidth={2.25} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block font-display text-base font-extrabold tabular-nums text-ops-ink">
-                      {delivered}
-                    </span>
-                    <span className="text-[11px] text-ops-ink/45">Livrés</span>
-                  </span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center">
-                    <svg viewBox="0 0 36 36" className="h-10 w-10 -rotate-90">
+              <div className="relative flex shrink-0 items-center justify-between gap-2">
+                <h2 className="text-[17px] font-semibold text-ops-ink lg:text-[15px]">
+                  Performance
+                </h2>
+                <div className="relative" ref={periodMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setPeriodOpen((v) => !v)}
+                    className="inline-flex items-center gap-1 rounded-full border border-ops-card bg-ops-ink/[0.04] px-2.5 py-1 text-[12px] font-semibold text-ops-ink/80 transition hover:bg-ops-ink/[0.08]"
+                    aria-expanded={periodOpen}
+                    aria-haspopup="listbox"
+                  >
+                    <CalendarDays className="h-3.5 w-3.5" aria-hidden />
+                    {PERIOD_LABELS[perfPeriod]}
+                    <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
+                  </button>
+                  {periodOpen ? (
+                    <div
+                      role="listbox"
+                      aria-label="Période"
+                      className="absolute right-0 z-20 mt-1.5 w-52 overflow-hidden rounded-xl border border-ops-card bg-ops-page py-1 shadow-ops"
+                    >
+                      {(
+                        [
+                          "today",
+                          "week",
+                          "month",
+                          "custom",
+                        ] as const satisfies readonly PerfPeriod[]
+                      ).map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          role="option"
+                          aria-selected={perfPeriod === key}
+                          onClick={() => {
+                            setPerfPeriod(key);
+                            if (key !== "custom") setPeriodOpen(false);
+                          }}
+                          className={cn(
+                            "flex w-full items-center px-3 py-2 text-left text-[13px] font-semibold transition",
+                            perfPeriod === key
+                              ? "bg-ops-accent/10 text-ops-accent"
+                              : "text-ops-ink/80 hover:bg-ops-ink/[0.06]",
+                          )}
+                        >
+                          {PERIOD_LABELS[key]}
+                        </button>
+                      ))}
+                      {perfPeriod === "custom" ? (
+                        <div className="space-y-2 border-t border-ops-ink/10 px-3 py-2.5">
+                          <label className="block text-[11px] font-medium text-ops-ink/50">
+                            Du
+                            <input
+                              type="date"
+                              value={customFrom}
+                              onChange={(e) => setCustomFrom(e.target.value)}
+                              className="mt-1 w-full rounded-lg border border-ops-card bg-ops-surface px-2 py-1.5 text-[12px] text-ops-ink outline-none focus:border-ops-accent/40"
+                            />
+                          </label>
+                          <label className="block text-[11px] font-medium text-ops-ink/50">
+                            Au
+                            <input
+                              type="date"
+                              value={customTo}
+                              onChange={(e) => setCustomTo(e.target.value)}
+                              className="mt-1 w-full rounded-lg border border-ops-card bg-ops-surface px-2 py-1.5 text-[12px] text-ops-ink outline-none focus:border-ops-accent/40"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setPeriodOpen(false)}
+                            className="w-full rounded-lg bg-ops-accent px-2 py-1.5 text-[12px] font-semibold text-white"
+                          >
+                            Appliquer
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-3 grid flex-1 grid-cols-2 items-center gap-3 lg:grid-cols-1 lg:justify-items-center lg:gap-4">
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="relative inline-flex h-[5.5rem] w-[5.5rem] items-center justify-center lg:h-28 lg:w-28">
+                    <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90" aria-hidden>
                       <circle
                         cx="18"
                         cy="18"
@@ -743,19 +962,32 @@ export function OpsDashboardBoard({
                         fill="none"
                         stroke="#E11D48"
                         strokeWidth="3"
-                        strokeDasharray={`${deliveryRate * 0.94} 100`}
+                        strokeDasharray={`${Math.min(100, Math.max(0, perfStats.rate)) * 0.94} 100`}
                         strokeLinecap="round"
                       />
                     </svg>
-                    <span className="absolute text-[10px] font-bold tabular-nums text-ops-ink">
-                      {deliveryRate}%
+                    <span className="absolute flex flex-col items-center leading-none">
+                      <span className="font-display text-lg font-extrabold tabular-nums text-ops-ink lg:text-xl">
+                        {perfStats.rate}%
+                      </span>
+                      <span className="mt-1 text-[11px] font-semibold tabular-nums text-ops-ink/55 lg:text-[12px]">
+                        {perfStats.deliveredCount} / {perfStats.total}
+                      </span>
                     </span>
                   </span>
-                  <span className="text-[11px] text-ops-ink/45">
-                    Livrés à temps
+                  <span className="text-center text-[12px] font-medium text-ops-ink/55">
+                    Taux de livraison
                   </span>
-                </li>
-              </ul>
+                </div>
+                <div className="flex flex-col items-center gap-1 border-ops-ink/10 lg:w-full lg:border-t lg:pt-3">
+                  <span className="font-display text-xl font-extrabold tabular-nums text-ops-ink lg:text-2xl">
+                    {formatMoney(perfStats.periodRevenue)}
+                  </span>
+                  <span className="text-center text-[12px] font-medium text-ops-ink/55">
+                    Chiffre d&apos;affaires
+                  </span>
+                </div>
+              </div>
             </section>
           </div>
 
@@ -776,16 +1008,64 @@ export function OpsDashboardBoard({
               <table className="w-full text-left text-[14px]">
                 <thead>
                   <tr className="border-b border-ops-card text-[12px] uppercase tracking-[0.08em] text-ops-ink/40">
-                    <th className="pb-2.5 pr-3 font-semibold">N° de colis</th>
-                    <th className="pb-2.5 pr-3 font-semibold">Client</th>
-                    <th className="pb-2.5 pr-3 font-semibold">Ville</th>
-                    <th className="pb-2.5 pr-3 font-semibold">Statut</th>
-                    <th className="pb-2.5 pr-3 font-semibold">Montant</th>
-                    <th className="pb-2.5 font-semibold">Date</th>
+                    <SortableTh
+                      label="N° de colis"
+                      column="code"
+                      activeKey={recentSortKey}
+                      sortDir={recentSortDir}
+                      onSort={toggleRecentSort}
+                      className="pb-2.5 pr-3"
+                      buttonClassName="uppercase tracking-[0.08em]"
+                    />
+                    <SortableTh
+                      label="Client"
+                      column="recipientName"
+                      activeKey={recentSortKey}
+                      sortDir={recentSortDir}
+                      onSort={toggleRecentSort}
+                      className="pb-2.5 pr-3"
+                      buttonClassName="uppercase tracking-[0.08em]"
+                    />
+                    <SortableTh
+                      label="Ville"
+                      column="city"
+                      activeKey={recentSortKey}
+                      sortDir={recentSortDir}
+                      onSort={toggleRecentSort}
+                      className="pb-2.5 pr-3"
+                      buttonClassName="uppercase tracking-[0.08em]"
+                    />
+                    <SortableTh
+                      label="Statut"
+                      column="status"
+                      activeKey={recentSortKey}
+                      sortDir={recentSortDir}
+                      onSort={toggleRecentSort}
+                      className="pb-2.5 pr-3"
+                      buttonClassName="uppercase tracking-[0.08em]"
+                    />
+                    <SortableTh
+                      label="Montant"
+                      column="price"
+                      activeKey={recentSortKey}
+                      sortDir={recentSortDir}
+                      onSort={toggleRecentSort}
+                      className="pb-2.5 pr-3"
+                      buttonClassName="uppercase tracking-[0.08em]"
+                    />
+                    <SortableTh
+                      label="Date"
+                      column="createdAt"
+                      activeKey={recentSortKey}
+                      sortDir={recentSortDir}
+                      onSort={toggleRecentSort}
+                      className="pb-2.5"
+                      buttonClassName="uppercase tracking-[0.08em]"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-ops-ink/[0.08]">
-                  {recent.slice(0, 12).map((p) => (
+                  {recentSorted.slice(0, 12).map((p) => (
                     <tr key={p.id} className="hover:bg-ops-ink/[0.03]">
                       <td className="py-3.5 pr-3">
                         <Link
@@ -981,12 +1261,6 @@ export function OpsDashboardBoard({
                 <h2 className="font-display text-[14px] font-bold leading-snug text-ops-ink">
                   Livraison plus rapide, plus proche de vos clients
                 </h2>
-                <Link
-                  href="/tarifs"
-                  className="mt-2 inline-flex rounded-full bg-ops-accent px-3 py-1.5 text-[11px] font-semibold text-white"
-                >
-                  Découvrir nos offres
-                </Link>
               </div>
               <div className="relative h-12 w-24 shrink-0">
                 <Image

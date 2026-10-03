@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
 import { SERVICES } from "@/components/landing/landing-data";
 
 export function LandingServices() {
@@ -53,13 +51,6 @@ export function LandingServices() {
           ))}
         </ul>
 
-        <Link
-          href="/tarifs"
-          className="reveal magnet mx-auto mt-3 inline-flex w-fit shrink-0 items-center gap-2 border-b border-[#991211] pb-0.5 text-[13px] font-semibold text-[#991211] transition hover:gap-3 sm:mt-5 sm:text-[14px] lg:mx-0"
-        >
-          Voir les tarifs
-          <ArrowUpRight className="h-4 w-4" aria-hidden />
-        </Link>
       </div>
     </section>
   );

@@ -28,6 +28,7 @@ import {
   type Payment,
   type PaymentStatus,
 } from "@/lib/domain";
+import { SortableTh, useTableSort } from "@/lib/table-sort";
 import { useApi, useApiQuery } from "@/lib/use-api";
 
 const STATUS_LABEL: Record<PaymentStatus, string> = {
@@ -36,6 +37,16 @@ const STATUS_LABEL: Record<PaymentStatus, string> = {
   PAYE: "Payé",
   REJETE: "Rejeté",
 };
+
+type PaymentSortKey = "id" | "sender" | "items" | "amount" | "status";
+
+const PAYMENT_SORT = {
+  id: (p: Payment) => p.id,
+  sender: (p: Payment) => p.sender?.name ?? "",
+  items: (p: Payment) => p.items.length,
+  amount: (p: Payment) => toAmount(p.amount),
+  status: (p: Payment) => STATUS_LABEL[p.status],
+} as const;
 
 const STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
   EN_DEMANDE: "warning",
@@ -100,10 +111,15 @@ export function PaymentsManager({
     [eligible, selected],
   );
 
-  const visible = useMemo(
+  const filtered = useMemo(
     () => paymentList.filter((p) => filter === "ALL" || p.status === filter),
     [paymentList, filter],
   );
+
+  const { sorted: visible, sortKey, sortDir, toggleSort } = useTableSort<
+    Payment,
+    PaymentSortKey
+  >(filtered, PAYMENT_SORT, "id", "desc");
 
   const allSelected = eligible.length > 0 && selected.length === eligible.length;
 
@@ -291,11 +307,45 @@ export function PaymentsManager({
           <table className={tableClass}>
             <thead className={theadClass}>
               <tr>
-                <th className={thClass}>Demande</th>
-                {canModerate ? <th className={thClass}>Expéditeur</th> : null}
-                <th className={thClass}>Colis</th>
-                <th className={`${thClass} text-right`}>Montant</th>
-                <th className={thClass}>Statut</th>
+                <SortableTh
+                  label="Demande"
+                  column="id"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                {canModerate ? (
+                  <SortableTh
+                    label="Expéditeur"
+                    column="sender"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                ) : null}
+                <SortableTh
+                  label="Colis"
+                  column="items"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Montant"
+                  column="amount"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="text-right"
+                  buttonClassName="ml-auto"
+                />
+                <SortableTh
+                  label="Statut"
+                  column="status"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
                 {canModerate ? <th className={`${thClass} text-right`}>Actions</th> : null}
               </tr>
             </thead>

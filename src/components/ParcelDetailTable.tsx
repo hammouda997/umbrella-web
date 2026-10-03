@@ -3,9 +3,6 @@
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   FileSpreadsheet,
   FileText,
   Package,
@@ -31,6 +28,7 @@ import { downloadParcelsExcel, openBordereauPdf, openParcelListPdf } from "@/lib
 import { useAuth } from "@/lib/auth-context";
 import { canSeeDeliveryMode } from "@/lib/roles";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { compareSortValues, SortableTh, type SortDir } from "@/lib/table-sort";
 
 export type DetailParcel = Parcel;
 
@@ -38,11 +36,13 @@ type SortKey = "code" | "recipientName" | "price" | "createdAt" | "status";
 
 const PAGE_SIZE = 10;
 
-function compare(a: Parcel, b: Parcel, key: SortKey) {
-  if (key === "price") return Number(a.price) - Number(b.price);
-  if (key === "createdAt") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  return String(a[key] ?? "").localeCompare(String(b[key] ?? ""), "fr", { numeric: true });
-}
+const PARCEL_SORT = {
+  code: (p: Parcel) => p.code ?? "",
+  recipientName: (p: Parcel) => p.recipientName,
+  price: (p: Parcel) => Number(p.price),
+  createdAt: (p: Parcel) => p.createdAt,
+  status: (p: Parcel) => STATUS_META[p.status as StatusKey]?.label ?? p.status,
+} as const;
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("fr-TN", {
@@ -73,7 +73,7 @@ export function ParcelDetailTable({
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -97,12 +97,14 @@ export function ParcelDetailTable({
             .includes(q),
         )
       : [...rows];
+    const dir = sortDir === "asc" ? 1 : -1;
+    const read = PARCEL_SORT[sortKey];
     list.sort((a, b) => {
       const za = a.zone?.name?.trim() || "\uffff";
       const zb = b.zone?.name?.trim() || "\uffff";
       const byZone = za.localeCompare(zb, "fr", { sensitivity: "base" });
       if (byZone !== 0) return byZone;
-      return (sortDir === "asc" ? 1 : -1) * compare(a, b, sortKey);
+      return dir * compareSortValues(read(a), read(b));
     });
     return list;
   }, [rows, query, sortKey, sortDir]);
@@ -168,29 +170,6 @@ export function ParcelDetailTable({
     } catch (err) {
       toast.error("Bordereau impossible", err instanceof Error ? err.message : undefined);
     }
-  }
-
-  function SortHead({ label, column, className }: { label: string; column: SortKey; className?: string }) {
-    const active = sortKey === column;
-    const Icon = active ? (sortDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-    return (
-      <th
-        className={cn(thClass, className)}
-        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-      >
-        <button
-          type="button"
-          onClick={() => toggleSort(column)}
-          className={cn(
-            "inline-flex items-center gap-1 text-ops-ink/45 hover:text-ops-accent",
-            active && "text-ops-ink",
-          )}
-        >
-          {label}
-          <Icon className="h-3 w-3 opacity-70" aria-hidden />
-        </button>
-      </th>
-    );
   }
 
   function codeCell(row: Parcel) {
@@ -363,11 +342,43 @@ export function ParcelDetailTable({
           <table className={cn(tableClass, "hidden md:table")}>
             <thead className={theadClass}>
               <tr>
-                <SortHead label="Code" column="code" />
-                <SortHead label="Destinataire" column="recipientName" />
-                <SortHead label="Statut" column="status" />
-                <SortHead label="COD" column="price" className="text-right" />
-                <SortHead label="Ajouté le" column="createdAt" />
+                <SortableTh
+                  label="Code"
+                  column="code"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Destinataire"
+                  column="recipientName"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Statut"
+                  column="status"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Montant"
+                  column="price"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="text-right"
+                  buttonClassName="ml-auto"
+                />
+                <SortableTh
+                  label="Ajouté le"
+                  column="createdAt"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
                 <th className={thClass}>Désignation</th>
                 <th className={cn(thClass, "text-right")}>Actions</th>
               </tr>

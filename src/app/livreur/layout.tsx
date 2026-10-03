@@ -1,14 +1,7 @@
 "use client";
 
-import { Home, Package, Settings } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
-import type { PortalNavItem } from "@/components/PortalShell";
-
-const links: PortalNavItem[] = [
-  { href: "/livreur", label: "Accueil", icon: Home },
-  { href: "/livreur/parcels", label: "Colis", icon: Package },
-  { href: "/livreur/settings", label: "Paramètres", icon: Settings },
-];
+import { portalSidebarLinks } from "@/lib/portal-nav-config";
 
 export default function LivreurLayout({
   children,
@@ -20,7 +13,7 @@ export default function LivreurLayout({
       roles={["LIVREUR"]}
       title="Livreur"
       subtitle="Tableau de bord"
-      links={links}
+      links={portalSidebarLinks("LIVREUR")}
     >
       {children}
     </RequireRole>

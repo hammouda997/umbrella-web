@@ -83,6 +83,7 @@ export function ParcelsManager({
   const showModes = canSeeDeliveryMode(role);
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status");
+  const codeQuery = searchParams.get("q")?.trim() ?? "";
   const request = useApi();
   const toast = useToast();
   const confirm = useConfirm();
@@ -124,15 +125,27 @@ export function ParcelsManager({
     } else if (statusFilter) {
       list = list.filter((p) => p.status === statusFilter);
     }
+    if (codeQuery) {
+      const q = codeQuery.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.code?.toLowerCase().includes(q) ||
+          String(p.id) === codeQuery ||
+          p.recipientName.toLowerCase().includes(q) ||
+          p.phone.includes(codeQuery),
+      );
+    }
     return list;
-  }, [parcels, statusFilter, returnsOnly]);
+  }, [parcels, statusFilter, returnsOnly, codeQuery]);
 
   const heading =
-    statusFilter && STATUS_META[statusFilter as StatusKey]
-      ? STATUS_META[statusFilter as StatusKey].label
-      : returnsOnly
-        ? "Mes retours"
-        : title;
+    codeQuery
+      ? `Recherche « ${codeQuery} »`
+      : statusFilter && STATUS_META[statusFilter as StatusKey]
+        ? STATUS_META[statusFilter as StatusKey].label
+        : returnsOnly
+          ? "Mes retours"
+          : title;
 
   function resetCreateForm() {
     setExchange(false);

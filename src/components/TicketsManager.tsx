@@ -24,7 +24,10 @@ import {
   type BadgeTone,
 } from "@/components/ui";
 import type { Parcel, Ticket, TicketStatus } from "@/lib/domain";
+import { SortableTh, useTableSort } from "@/lib/table-sort";
 import { useApi, useApiQuery } from "@/lib/use-api";
+
+type TicketSortKey = "title" | "parcel" | "status" | "createdAt";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   EN_COURS: "En cours",
@@ -37,6 +40,13 @@ const STATUS_TONE: Record<TicketStatus, BadgeTone> = {
   RESOLU: "success",
   FERME: "neutral",
 };
+
+const TICKET_SORT = {
+  title: (t: Ticket) => t.title,
+  parcel: (t: Ticket) => t.parcel?.code ?? "",
+  status: (t: Ticket) => STATUS_LABEL[t.status],
+  createdAt: (t: Ticket) => t.createdAt,
+} as const;
 
 type Filter = "ALL" | TicketStatus;
 
@@ -70,7 +80,7 @@ export function TicketsManager({
     [tickets],
   );
 
-  const visible = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tickets.filter(
       (t) =>
@@ -82,6 +92,11 @@ export function TicketsManager({
             .includes(q)),
     );
   }, [tickets, filter, query]);
+
+  const { sorted: visible, sortKey, sortDir, toggleSort } = useTableSort<
+    Ticket,
+    TicketSortKey
+  >(filtered, TICKET_SORT, "createdAt", "desc");
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -209,10 +224,35 @@ export function TicketsManager({
           <table className={tableClass}>
             <thead className={theadClass}>
               <tr>
-                <th className={thClass}>Ticket</th>
-                <th className={thClass}>Colis</th>
-                <th className={thClass}>Statut</th>
-                <th className={`${thClass} hidden md:table-cell`}>Ouvert le</th>
+                <SortableTh
+                  label="Ticket"
+                  column="title"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Colis"
+                  column="parcel"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Statut"
+                  column="status"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Ouvert le"
+                  column="createdAt"
+                  activeKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="hidden md:table-cell"
+                />
                 <th className={`${thClass} text-right`}>Actions</th>
               </tr>
             </thead>

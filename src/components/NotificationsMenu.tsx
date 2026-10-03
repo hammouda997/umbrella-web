@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Bell, Check, MessageSquareWarning, Package, Wallet } from "lucide-react";
 import type { AppNotification, NotificationKind } from "@/lib/domain";
@@ -64,7 +65,19 @@ export function NotificationsMenu({
   const [seenAt, setSeenAt] = useState(0);
   const [readIds, setReadIds] = useState<string[]>([]);
   const [localTick, setLocalTick] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     const stored = loadNotificationReads(userId);
@@ -99,7 +112,10 @@ export function NotificationsMenu({
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
@@ -159,6 +175,152 @@ export function NotificationsMenu({
     });
   }
 
+  function renderPanel(className: string) {
+    return (
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-label="Notifications"
+        className={cn(
+          "overflow-hidden rounded-2xl border shadow-ops",
+          className,
+          tone === "on-dark"
+            ? "border-ops-ink/10 bg-ops-surface"
+            : "border-ops-card bg-ops-surface",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 border-b px-4 py-3",
+            tone === "on-dark" ? "border-ops-ink/10" : "border-ops-card",
+          )}
+        >
+          <p className="font-display text-sm font-bold text-ops-ink">
+            Notifications
+          </p>
+          <button
+            type="button"
+            onClick={markAllRead}
+            disabled={unread === 0}
+            className={cn(
+              "shrink-0 text-xs font-semibold transition disabled:opacity-40",
+              tone === "on-dark"
+                ? "text-ops-accent-muted hover:text-ops-accent"
+                : "text-ops-accent hover:text-ops-accent/80 disabled:text-ops-ink/50/60",
+            )}
+          >
+            Tout marquer comme lu
+          </button>
+        </div>
+        <ul className="max-h-[min(60vh,28rem)] overflow-y-auto">
+          {loading && items.length === 0 ? (
+            <li
+              className={cn(
+                "px-4 py-6 text-center text-sm",
+                tone === "on-dark" ? "text-ops-ink/45" : "text-ops-ink/50",
+              )}
+            >
+              Chargement…
+            </li>
+          ) : null}
+          {!loading && items.length === 0 ? (
+            <li
+              className={cn(
+                "px-4 py-8 text-center text-sm",
+                tone === "on-dark" ? "text-ops-ink/45" : "text-ops-ink/50",
+              )}
+            >
+              Aucune notification pour le moment
+            </li>
+          ) : null}
+          {items.map((item) => {
+            const kind: NotificationKind = item.kind;
+            const Icon = KIND_ICON[kind];
+            const isUnread = isNotificationUnread(item.at, item.id, seenAt, readSet);
+            return (
+              <li
+                key={item.id}
+                className={cn(
+                  "flex items-stretch border-b",
+                  tone === "on-dark" ? "border-ops-ink/[0.08]" : "border-ops-card/60",
+                  isUnread &&
+                    (tone === "on-dark" ? "bg-ops-accent/10" : "bg-ops-accent/[0.08]"),
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => openItem(item)}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left transition",
+                    tone === "on-dark"
+                      ? "hover:bg-ops-ink/[0.04]"
+                      : "hover:bg-ops-ink/[0.05]",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                      tone === "on-dark"
+                        ? "bg-ops-ink/[0.08] text-ops-accent-muted"
+                        : "bg-ops-surface-2 text-ops-accent",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold text-ops-ink">
+                        {item.title}
+                      </span>
+                      {isUnread ? (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full bg-ops-accent"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </span>
+                    <span
+                      className={cn(
+                        "mt-0.5 block truncate text-xs",
+                        tone === "on-dark" ? "text-ops-ink/50" : "text-ops-ink/50",
+                      )}
+                    >
+                      {item.body}
+                    </span>
+                    <span
+                      className={cn(
+                        "mt-1 block text-[11px]",
+                        tone === "on-dark" ? "text-ops-ink/35" : "text-ops-ink/50/80",
+                      )}
+                    >
+                      {relativeTime(item.at)}
+                    </span>
+                  </span>
+                </button>
+                {isUnread ? (
+                  <button
+                    type="button"
+                    onClick={() => markRead(item.id)}
+                    className={cn(
+                      "m-2 inline-flex shrink-0 items-center gap-1 self-center rounded-lg px-2 py-1.5 text-[11px] font-semibold transition",
+                      tone === "on-dark"
+                        ? "text-ops-accent-muted hover:bg-ops-accent/15"
+                        : "text-ops-accent hover:bg-ops-accent/15",
+                    )}
+                    aria-label={`Marquer « ${item.title} » comme lu`}
+                  >
+                    <Check className="h-3.5 w-3.5" aria-hidden />
+                    Lu
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="relative" ref={rootRef}>
       <button
@@ -182,157 +344,26 @@ export function NotificationsMenu({
         ) : null}
       </button>
 
-      {open ? (
-        <div
-          role="dialog"
-          aria-label="Notifications"
-          className={cn(
-            "absolute right-0 z-50 mt-2 w-[min(92vw,380px)] overflow-hidden rounded-2xl border shadow-ops",
-            tone === "on-dark"
-              ? "border-ops-ink/10 bg-ops-surface"
-              : "border-ops-card bg-ops-surface",
-          )}
-        >
-          <div
-            className={cn(
-              "flex items-center justify-between gap-3 border-b px-4 py-3",
-              tone === "on-dark" ? "border-ops-ink/10" : "border-ops-card",
-            )}
-          >
-            <p
-              className={cn(
-                "font-display text-sm font-bold",
-                tone === "on-dark" ? "text-ops-ink" : "text-ops-ink",
+      {open && isDesktop
+        ? renderPanel("absolute right-0 z-50 mt-2 w-[min(92vw,380px)]")
+        : null}
+
+      {open && mounted && !isDesktop
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-[70] bg-black/40"
+                aria-label="Fermer les notifications"
+                onClick={() => setOpen(false)}
+              />
+              {renderPanel(
+                "fixed inset-x-3 top-[4.25rem] z-[80] max-h-[min(70vh,32rem)] w-auto",
               )}
-            >
-              Notifications
-            </p>
-            <button
-              type="button"
-              onClick={markAllRead}
-              disabled={unread === 0}
-              className={cn(
-                "shrink-0 text-xs font-semibold transition disabled:opacity-40",
-                tone === "on-dark"
-                  ? "text-ops-accent-muted hover:text-ops-accent"
-                  : "text-ops-accent hover:text-ops-accent/80 disabled:text-ops-ink/50/60",
-              )}
-            >
-              Tout marquer comme lu
-            </button>
-          </div>
-          <ul className="max-h-[60vh] overflow-y-auto">
-            {loading && items.length === 0 ? (
-              <li
-                className={cn(
-                  "px-4 py-6 text-center text-sm",
-                  tone === "on-dark" ? "text-ops-ink/45" : "text-ops-ink/50",
-                )}
-              >
-                Chargement…
-              </li>
-            ) : null}
-            {!loading && items.length === 0 ? (
-              <li
-                className={cn(
-                  "px-4 py-8 text-center text-sm",
-                  tone === "on-dark" ? "text-ops-ink/45" : "text-ops-ink/50",
-                )}
-              >
-                Aucune notification pour le moment
-              </li>
-            ) : null}
-            {items.map((item) => {
-              const kind: NotificationKind = item.kind;
-              const Icon = KIND_ICON[kind];
-              const isUnread = isNotificationUnread(item.at, item.id, seenAt, readSet);
-              return (
-                <li
-                  key={item.id}
-                  className={cn(
-                    "flex items-stretch border-b",
-                    tone === "on-dark" ? "border-ops-ink/[0.08]" : "border-ops-card/60",
-                    isUnread &&
-                      (tone === "on-dark" ? "bg-ops-accent/10" : "bg-ops-accent/[0.08]"),
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => openItem(item)}
-                    className={cn(
-                      "flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left transition",
-                      tone === "on-dark"
-                        ? "hover:bg-ops-ink/[0.04]"
-                        : "hover:bg-ops-ink/[0.05]",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                        tone === "on-dark"
-                          ? "bg-ops-ink/[0.08] text-ops-accent-muted"
-                          : "bg-ops-surface-2 text-ops-accent",
-                      )}
-                    >
-                      <Icon className="h-4 w-4" aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span
-                          className={cn(
-                            "truncate text-sm font-semibold",
-                            tone === "on-dark" ? "text-ops-ink" : "text-ops-ink",
-                          )}
-                        >
-                          {item.title}
-                        </span>
-                        {isUnread ? (
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full bg-ops-accent"
-                            aria-hidden
-                          />
-                        ) : null}
-                      </span>
-                      <span
-                        className={cn(
-                          "mt-0.5 block truncate text-xs",
-                          tone === "on-dark" ? "text-ops-ink/50" : "text-ops-ink/50",
-                        )}
-                      >
-                        {item.body}
-                      </span>
-                      <span
-                        className={cn(
-                          "mt-1 block text-[11px]",
-                          tone === "on-dark" ? "text-ops-ink/35" : "text-ops-ink/50/80",
-                        )}
-                      >
-                        {relativeTime(item.at)}
-                      </span>
-                    </span>
-                  </button>
-                  {isUnread ? (
-                    <button
-                      type="button"
-                      onClick={() => markRead(item.id)}
-                      className={cn(
-                        "m-2 inline-flex shrink-0 items-center gap-1 self-center rounded-lg px-2 py-1.5 text-[11px] font-semibold transition",
-                        tone === "on-dark"
-                          ? "text-ops-accent-muted hover:bg-ops-accent/15"
-                          : "text-ops-accent hover:bg-ops-accent/15",
-                      )}
-                      aria-label={`Marquer « ${item.title} » comme lu`}
-                    >
-                      <Check className="h-3.5 w-3.5" aria-hidden />
-                      Lu
-                    </button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : null}
+            </>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

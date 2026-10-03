@@ -26,18 +26,25 @@ import { cn } from "@/lib/cn";
 import type { Driver, Parcel, Zone } from "@/lib/domain";
 import { canSeeDeliveryMode } from "@/lib/roles";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import {
+  requiresComment,
+  selectableStatuses,
+} from "@/lib/parcel-transitions";
+import type { AppRole } from "@/lib/roles";
+import { SortableTh, useTableSort } from "@/lib/table-sort";
 import { useApi, useApiQuery } from "@/lib/use-api";
 
-const LIVREUR_STATUSES: StatusKey[] = [
-  "A_ENLEVER",
-  "ENLEVES",
-  "EN_COURS",
-  "LIVRES",
-  "A_VERIFIER",
-  "RETOUR_DEPOT",
-];
-
 const ACTIVE_STATUSES = ["A_ENLEVER", "ENLEVES", "AU_DEPOT", "EN_COURS", "A_VERIFIER"];
+
+type DispatchSortKey = "code" | "recipientName" | "status" | "driver";
+
+const DISPATCH_SORT = {
+  code: (p: Parcel) => p.code ?? "",
+  recipientName: (p: Parcel) => p.recipientName,
+  status: (p: Parcel) =>
+    STATUS_META[p.status as StatusKey]?.label ?? p.status,
+  driver: (p: Parcel) => p.driver?.name ?? "",
+} as const;
 
 type Filter = "ALL" | "UNASSIGNED" | "ACTIVE";
 
@@ -70,7 +77,7 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
     [parcels],
   );
 
-  const visible = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return parcels.filter((p) => {
       if (filter === "UNASSIGNED" && (p.mode !== "INTERNAL" || p.driver)) return false;
@@ -83,7 +90,12 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
     });
   }, [parcels, filter, query]);
 
-  const statusOptions = staffMode ? (Object.keys(STATUS_META) as StatusKey[]) : LIVREUR_STATUSES;
+  const { sorted: visible, sortKey, sortDir, toggleSort } = useTableSort<
+    Parcel,
+    DispatchSortKey
+  >(filtered, DISPATCH_SORT, "code");
+
+  const role = (session?.user.role ?? "LIVREUR") as AppRole;
 
   async function assign(parcel: Parcel, driverId: number) {
     setBusyId(parcel.id);
@@ -119,9 +131,23 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
   }
 
   async function setStatus(parcel: Parcel, status: string) {
+    let comment: string | undefined;
+    if (requiresComment(status, parcel.status)) {
+      const typed = window.prompt(
+        `Motif pour « ${STATUS_META[status as StatusKey]?.label ?? status} »`,
+      );
+      if (typed == null || !typed.trim()) {
+        toast.info("Statut annulé", "Un motif est obligatoire");
+        return;
+      }
+      comment = typed.trim();
+    }
     setBusyId(parcel.id);
     try {
-      await request(`/parcels/${parcel.id}/status`, "PATCH", { status });
+      await request(`/parcels/${parcel.id}/status`, "PATCH", {
+        status,
+        comment,
+      });
       toast.success(
         `${parcel.code ?? `#${parcel.id}`} → ${STATUS_META[status as StatusKey]?.label ?? status}`,
       );
@@ -182,18 +208,20 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
   }
 
   function statusSelect(p: Parcel) {
+    const options = selectableStatuses(p.status, role);
     return (
       <select
         aria-label={`Statut de ${p.code ?? p.id}`}
         className={selectClass}
         value={p.status}
         disabled={busyId === p.id}
-        onChange={(e) => void setStatus(p, e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next === p.status) return;
+          void setStatus(p, next);
+        }}
       >
-        {!statusOptions.includes(p.status as StatusKey) ? (
-          <option value={p.status}>{STATUS_META[p.status as StatusKey]?.label ?? p.status}</option>
-        ) : null}
-        {statusOptions.map((s) => (
+        {options.map((s) => (
           <option key={s} value={s}>
             {STATUS_META[s].label}
           </option>
@@ -320,10 +348,36 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
             <table className={tableClass}>
               <thead className={theadClass}>
                 <tr>
-                  <th className={thClass}>Colis</th>
-                  <th className={thClass}>Destinataire</th>
-                  <th className={thClass}>Statut</th>
-                  {staffMode ? <th className={thClass}>Livreur</th> : null}
+                  <SortableTh
+                    label="Colis"
+                    column="code"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <SortableTh
+                    label="Destinataire"
+                    column="recipientName"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <SortableTh
+                    label="Statut"
+                    column="status"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  {staffMode ? (
+                    <SortableTh
+                      label="Livreur"
+                      column="driver"
+                      activeKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={toggleSort}
+                    />
+                  ) : null}
                   <th className={thClass}>Changer le statut</th>
                 </tr>
               </thead>

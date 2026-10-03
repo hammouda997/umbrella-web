@@ -26,20 +26,29 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function loginWith(nextEmail: string, nextPassword: string) {
+    setEmail(nextEmail);
+    setPassword(nextPassword);
     setLoading(true);
     setError(null);
     try {
-      const session = await signIn(email, password);
+      const session = await signIn(nextEmail, nextPassword);
       const next = searchParams.get("next");
-      const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
-      router.replace(safeNext ?? session.portal ?? PORTAL_BY_ROLE[session.user.role]);
+      const safeNext =
+        next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+      router.replace(
+        safeNext ?? session.portal ?? PORTAL_BY_ROLE[session.user.role],
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    await loginWith(email, password);
   }
 
   return (
@@ -92,12 +101,9 @@ function LoginForm() {
             <button
               key={acc.email}
               type="button"
-              onClick={() => {
-                setEmail(acc.email);
-                setPassword(acc.password);
-                setError(null);
-              }}
-              className="rounded-xl border border-cream bg-surface px-3 py-2 text-left transition hover:border-brand"
+              disabled={loading}
+              onClick={() => void loginWith(acc.email, acc.password)}
+              className="rounded-xl border border-cream bg-surface px-3 py-2 text-left transition hover:border-brand disabled:opacity-60"
             >
               <span className="block text-sm font-semibold text-ink">{acc.label}</span>
               <span className="block truncate text-[11px] text-ink-muted">{acc.email}</span>

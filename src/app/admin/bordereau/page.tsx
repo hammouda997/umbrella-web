@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { formatTnd, type Parcel } from "@/lib/domain";
+import { ParcelBarcode } from "@/components/ParcelBarcode";
 import { openBordereauPdf } from "@/lib/parcel-report";
 import { PORTAL_BY_ROLE } from "@/lib/roles";
 import { useApiQuery } from "@/lib/use-api";
@@ -94,14 +95,15 @@ function BordereauInner() {
             <p className="text-[11px] uppercase text-ops-ink/50">Contenu</p>
             <p className="text-ops-ink">{parcel.designation ?? parcel.notes ?? "—"}</p>
           </div>
-          <div className="mt-8 flex justify-center">
-            <div
-              className="h-16 w-56 rounded bg-[repeating-linear-gradient(90deg,#1A1414_0_2px,transparent_2px_5px,#1A1414_5px_6px,transparent_6px_9px)]"
-              aria-label={`Code-barres ${parcel.code}`}
-              role="img"
-            />
-          </div>
-          <p className="text-center font-mono text-[11px] text-ops-ink/50">{parcel.code}</p>
+          {parcel.code ? (
+            <div className="mt-8 flex justify-center [&_svg]:max-w-full">
+              <ParcelBarcode code={parcel.code} height={72} />
+            </div>
+          ) : (
+            <p className="mt-8 text-center text-sm text-ops-ink/50">
+              Code colis manquant — non scannable
+            </p>
+          )}
         </div>
       </Panel>
     </div>

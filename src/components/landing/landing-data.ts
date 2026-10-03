@@ -31,8 +31,8 @@ export const WHY_POINTS = [
   },
   {
     n: "03",
-    title: "Tarifs lisibles",
-    body: "Une grille claire. Vous savez ce que coûte chaque colis, avant l’envoi.",
+    title: "Suivi en temps réel",
+    body: "Chaque étape du colis visible — de l’enlèvement jusqu’à la remise.",
   },
   {
     n: "04",

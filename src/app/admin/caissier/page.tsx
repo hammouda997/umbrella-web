@@ -20,11 +20,130 @@ import {
   trClass,
 } from "@/components/ui";
 import { formatTnd, type CodItem, type CodPayload } from "@/lib/domain";
+import { SortableTh, useTableSort } from "@/lib/table-sort";
 import { useApi, useApiQuery } from "@/lib/use-api";
 
 type Filter = "OPEN" | "SETTLED";
 
 type DriverGroup = { key: string; name: string; items: CodItem[]; total: number };
+
+type CodSortKey = "code" | "recipientName" | "price" | "settled";
+
+const COD_SORT = {
+  code: (i: CodItem) => i.code ?? "",
+  recipientName: (i: CodItem) => i.recipientName,
+  price: (i: CodItem) => i.price,
+  settled: (i: CodItem) => i.codSettledAt ?? "",
+} as const;
+
+function CodItemsTable({
+  items,
+  filter,
+  busyKey,
+  onSettle,
+}: {
+  items: CodItem[];
+  filter: Filter;
+  busyKey: string | null;
+  onSettle: (ids: number[], label: string, key: string, amount: number) => void;
+}) {
+  const { sorted, sortKey, sortDir, toggleSort } = useTableSort<CodItem, CodSortKey>(
+    items,
+    COD_SORT,
+    "code",
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className={tableClass}>
+        <thead className={theadClass}>
+          <tr>
+            <SortableTh
+              label="Colis"
+              column="code"
+              activeKey={sortKey}
+              sortDir={sortDir}
+              onSort={toggleSort}
+            />
+            <SortableTh
+              label="Destinataire"
+              column="recipientName"
+              activeKey={sortKey}
+              sortDir={sortDir}
+              onSort={toggleSort}
+            />
+            <SortableTh
+              label="Montant"
+              column="price"
+              activeKey={sortKey}
+              sortDir={sortDir}
+              onSort={toggleSort}
+              className="text-right"
+              buttonClassName="ml-auto"
+            />
+            <SortableTh
+              label="Statut"
+              column="settled"
+              activeKey={sortKey}
+              sortDir={sortDir}
+              onSort={toggleSort}
+            />
+            {filter === "OPEN" ? (
+              <th className={`${thClass} text-right`}>Action</th>
+            ) : null}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((item) => (
+            <tr key={item.id} className={trClass}>
+              <td className={`${tdClass} font-mono text-xs font-semibold text-ops-ink`}>
+                {item.code}
+              </td>
+              <td className={tdClass}>
+                <p className="text-ops-ink">{item.recipientName}</p>
+                <p className="text-xs text-ops-ink/50">{item.city}</p>
+              </td>
+              <td className={`${tdClass} text-right font-semibold text-ops-ink`}>
+                {formatTnd(item.price)}
+              </td>
+              <td className={tdClass}>
+                {item.codSettledAt ? (
+                  <Badge tone="success" dot>
+                    Encaissé le{" "}
+                    {new Date(item.codSettledAt).toLocaleDateString("fr-TN")}
+                  </Badge>
+                ) : (
+                  <Badge tone="warning" dot>
+                    En attente
+                  </Badge>
+                )}
+              </td>
+              {filter === "OPEN" ? (
+                <td className={`${tdClass} text-right`}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busyKey !== null}
+                    onClick={() =>
+                      onSettle(
+                        [item.id],
+                        item.code ?? `#${item.id}`,
+                        `item-${item.id}`,
+                        item.price,
+                      )
+                    }
+                  >
+                    Encaisser
+                  </Button>
+                </td>
+              ) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function groupByDriver(items: CodItem[]): DriverGroup[] {
   const map = new Map<string, DriverGroup>();
@@ -156,56 +275,14 @@ export default function CaissierPage() {
                 </Button>
               ) : null}
             </div>
-            <div className="overflow-x-auto">
-              <table className={tableClass}>
-                <thead className={theadClass}>
-                  <tr>
-                    <th className={thClass}>Colis</th>
-                    <th className={thClass}>Destinataire</th>
-                    <th className={`${thClass} text-right`}>Montant</th>
-                    <th className={thClass}>Statut</th>
-                    {filter === "OPEN" ? <th className={`${thClass} text-right`}>Action</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.items.map((item) => (
-                    <tr key={item.id} className={trClass}>
-                      <td className={`${tdClass} font-mono text-xs font-semibold text-ops-ink`}>{item.code}</td>
-                      <td className={tdClass}>
-                        <p className="text-ops-ink">{item.recipientName}</p>
-                        <p className="text-xs text-ops-ink/50">{item.city}</p>
-                      </td>
-                      <td className={`${tdClass} text-right font-semibold text-ops-ink`}>{formatTnd(item.price)}</td>
-                      <td className={tdClass}>
-                        {item.codSettledAt ? (
-                          <Badge tone="success" dot>
-                            Encaissé le {new Date(item.codSettledAt).toLocaleDateString("fr-TN")}
-                          </Badge>
-                        ) : (
-                          <Badge tone="warning" dot>
-                            En attente
-                          </Badge>
-                        )}
-                      </td>
-                      {filter === "OPEN" ? (
-                        <td className={`${tdClass} text-right`}>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={busyKey !== null}
-                            onClick={() =>
-                              void settle([item.id], item.code ?? `#${item.id}`, `item-${item.id}`, item.price)
-                            }
-                          >
-                            Encaisser
-                          </Button>
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <CodItemsTable
+              items={group.items}
+              filter={filter}
+              busyKey={busyKey}
+              onSettle={(ids, label, key, amount) =>
+                void settle(ids, label, key, amount)
+              }
+            />
           </Panel>
         ))}
       </div>

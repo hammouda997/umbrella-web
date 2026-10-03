@@ -169,6 +169,41 @@ export function livreurActionsFor(status: string): LivreurAction[] {
           status: "LIVRES_PAYES",
           tone: "success",
         },
+        {
+          id: "return-after-deliver",
+          label: "Retour dépôt",
+          emoji: "↩️",
+          status: "RETOUR_DEPOT",
+          tone: "danger",
+          needsComment: true,
+          commentLabel: "Motif retour",
+        },
+      ];
+    case "RETOUR_DEPOT":
+      return [
+        {
+          id: "redepot",
+          label: "Au dépôt",
+          emoji: "🏭",
+          status: "AU_DEPOT",
+          tone: "neutral",
+        },
+        {
+          id: "retry",
+          label: "Reprendre livraison",
+          emoji: "🛵",
+          status: "EN_COURS",
+          tone: "primary",
+        },
+        {
+          id: "return-sender",
+          label: "Retour expéditeur",
+          emoji: "🚫",
+          status: "RETOUR_EXPEDITEURS",
+          tone: "danger",
+          needsComment: true,
+          commentLabel: "Motif",
+        },
       ];
     default:
       return [
@@ -200,9 +235,11 @@ export function livreurActionsFor(status: string): LivreurAction[] {
 }
 
 export const ACTION_TONE_CLASS: Record<LivreurAction["tone"], string> = {
-  primary: "bg-brand text-white hover:bg-brand-soft",
+  primary: "bg-ops-accent text-white hover:bg-ops-accent/90",
   success: "bg-emerald-700 text-white hover:bg-emerald-800",
-  warn: "bg-amber-500 text-ink hover:bg-amber-400",
-  danger: "border border-brand/40 bg-brand/10 text-brand hover:bg-brand/15",
-  neutral: "border border-cream bg-surface text-ink hover:border-brand",
+  warn: "bg-amber-500 text-ops-ink hover:bg-amber-400",
+  danger:
+    "border border-ops-accent/40 bg-ops-accent/10 text-ops-accent hover:bg-ops-accent/15",
+  neutral:
+    "border border-ops-card bg-ops-surface text-ops-ink hover:border-ops-accent/50",
 };

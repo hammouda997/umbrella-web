@@ -64,11 +64,6 @@ export default function LandingPage() {
                   </li>
                 ))}
                 <li>
-                  <Link href="/tarifs" className="transition hover:text-[#991211]">
-                    Tarifs
-                  </Link>
-                </li>
-                <li>
                   <Link href="/signup" className="transition hover:text-[#991211]">
                     Créer un compte
                   </Link>

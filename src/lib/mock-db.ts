@@ -18,6 +18,10 @@ import {
   type MockUser,
   type MockZone,
 } from "@/lib/mock-data";
+import {
+  canTransition,
+  requiresComment,
+} from "@/lib/parcel-transitions";
 import { STATUS_ORDER } from "@/lib/portal-nav";
 import { PORTAL_BY_ROLE, type AppRole } from "@/lib/roles";
 import { STATUS_META } from "@/lib/status-meta";
@@ -697,6 +701,57 @@ function setUserActive(actor: Actor, id: number, dto: Record<string, unknown>) {
   return publicUser(target);
 }
 
+function updateUser(actor: Actor, id: number, dto: Record<string, unknown>) {
+  const target = db().users.find((u) => u.id === id);
+  if (!target) throw new MockHttpError(404, "Utilisateur introuvable");
+  if (actor.role === "ADMIN" && target.role === "SUPER_ADMIN") {
+    throw new MockHttpError(403, "Les admins ne peuvent pas gérer les super-admins");
+  }
+  if (actor.role !== "SUPER_ADMIN" && actor.role !== "ADMIN") {
+    throw new MockHttpError(403, "Accès refusé");
+  }
+
+  const nextRole = dto.role as AppRole | undefined;
+  if (nextRole) {
+    if (!["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR", "CLIENT"].includes(nextRole)) {
+      throw new MockHttpError(400, "Rôle invalide");
+    }
+    if (nextRole === "SUPER_ADMIN" && actor.role !== "SUPER_ADMIN") {
+      throw new MockHttpError(403, "Seul un super admin peut assigner ce rôle");
+    }
+    if (target.id === actor.id && nextRole !== target.role) {
+      throw new MockHttpError(400, "Impossible de changer votre propre rôle");
+    }
+    target.role = nextRole;
+  }
+
+  const email = str(dto.email)?.toLowerCase();
+  if (email && email !== target.email) {
+    if (db().users.some((u) => u.id !== id && u.email.toLowerCase() === email)) {
+      throw new MockHttpError(409, "Email déjà utilisé");
+    }
+    target.email = email;
+  }
+  const name = str(dto.name);
+  if (name) target.name = name;
+  const phone = str(dto.phone);
+  if (phone !== undefined) {
+    if (phone && !/^[0-9]{8}$/.test(phone)) {
+      throw new MockHttpError(400, "Téléphone : 8 chiffres");
+    }
+    target.phone = phone ?? "";
+  }
+  const password = typeof dto.password === "string" ? dto.password : "";
+  if (password) {
+    if (password.length < 8) {
+      throw new MockHttpError(400, "Mot de passe : 8 caractères minimum");
+    }
+    target.password = password;
+  }
+  commit();
+  return publicUser(target);
+}
+
 function updateProfile(actor: Actor, dto: Record<string, unknown>) {
   const user = db().users.find((u) => u.id === actor.id);
   if (!user) throw new MockHttpError(404, "Utilisateur introuvable");
@@ -877,6 +932,65 @@ const ROUTES: Route[] = [
   { method: "GET", pattern: /^\/parcels$/, handler: ({ actor }) => scopeParcels(actor) },
   {
     method: "GET",
+    pattern: /^\/parcels\/by-code\/([^/]+)$/,
+    handler: ({ actor, params }) => {
+      const code = decodeURIComponent(params[0] ?? "").trim();
+      const hit = db().parcels.find(
+        (p) =>
+          p.status !== "SUPPRIME" &&
+          p.code?.toLowerCase() === code.toLowerCase(),
+      );
+      if (!hit) throw new MockHttpError(404, "Colis introuvable");
+      return findScopedParcel(actor, hit.id);
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/parcels\/scan$/,
+    roles: ["SUPER_ADMIN", "ADMIN", "LIVREUR"],
+    handler: ({ actor, body }) => {
+      const code = str(body.code)?.trim() ?? "";
+      const hit = db().parcels.find(
+        (p) =>
+          p.status !== "SUPPRIME" &&
+          p.code?.toLowerCase() === code.toLowerCase(),
+      );
+      if (!hit) throw new MockHttpError(404, "Colis introuvable");
+      if (actor.role === "LIVREUR" && hit.driverId !== actor.id) {
+        throw new MockHttpError(403, "Ce colis ne vous est pas assigné");
+      }
+      const status = body.status ? String(body.status) : null;
+      if (!status) {
+        pushEvent(hit, "Scan bordereau", {
+          status: hit.status,
+          comment: hit.code ? `Code ${hit.code}` : null,
+          actor,
+        });
+        commit();
+        return findScopedParcel(actor, hit.id);
+      }
+      if (!(status in STATUS_META)) throw new MockHttpError(400, "Statut invalide");
+      const gate = canTransition(hit.status, status, actor.role);
+      if (!gate.ok) throw new MockHttpError(400, gate.reason);
+      const comment = str(body.comment) ?? null;
+      if (requiresComment(status, hit.status) && !comment?.trim()) {
+        throw new MockHttpError(
+          400,
+          "Un motif / commentaire est obligatoire pour ce statut",
+        );
+      }
+      hit.status = status;
+      pushEvent(hit, EVENT_LABEL[status] ?? status, {
+        status,
+        comment,
+        actor,
+      });
+      commit();
+      return findScopedParcel(actor, hit.id);
+    },
+  },
+  {
+    method: "GET",
     pattern: /^\/parcels\/(\d+)$/,
     handler: ({ actor, params }) => findScopedParcel(actor, Number(params[0])),
   },
@@ -959,10 +1073,19 @@ const ROUTES: Route[] = [
       }
       const status = String(body.status ?? "");
       if (!(status in STATUS_META)) throw new MockHttpError(400, "Statut invalide");
+      const gate = canTransition(parcel.status, status, actor.role);
+      if (!gate.ok) throw new MockHttpError(400, gate.reason);
+      const comment = str(body.comment) ?? null;
+      if (requiresComment(status, parcel.status) && !comment?.trim()) {
+        throw new MockHttpError(
+          400,
+          "Un motif / commentaire est obligatoire pour ce statut",
+        );
+      }
       parcel.status = status;
       pushEvent(parcel, EVENT_LABEL[status] ?? status, {
         status,
-        comment: str(body.comment) ?? null,
+        comment,
         actor,
       });
       commit();
@@ -1084,6 +1207,13 @@ const ROUTES: Route[] = [
     method: "PATCH",
     pattern: /^\/users\/me\/password$/,
     handler: ({ actor, body }) => changePassword(actor, body),
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/users\/(\d+)$/,
+    roles: STAFF,
+    handler: ({ actor, params, body }) =>
+      updateUser(actor, Number(params[0]), body),
   },
   {
     method: "PATCH",

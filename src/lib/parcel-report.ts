@@ -1,4 +1,5 @@
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { code128DataUrl } from "@/lib/code128";
 
 export type ReportParcel = {
   code: string | null;
@@ -409,16 +410,10 @@ export function openBordereauPdf(
       .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #6b5e56; margin: 0 0 3px; }
       .value { font-size: 13px; font-weight: 700; margin: 0; }
       .barcode {
-        margin: 22px auto 6px;
-        height: 56px;
-        width: 220px;
-        background:
-          repeating-linear-gradient(
-            90deg,
-            #1a1414 0 2px,
-            transparent 2px 4px
-          );
-        border-radius: 2px;
+        margin: 18px auto 4px;
+        display: block;
+        max-width: 100%;
+        height: auto;
       }
     </style>
     <div class="bl">
@@ -458,7 +453,11 @@ export function openBordereauPdf(
           }</p>
         </div>
       </div>
-      <div class="barcode" aria-hidden="true"></div>
+      ${
+        parcel.code
+          ? `<img class="barcode" src="${code128DataUrl(parcel.code)}" alt="Code-barres ${escapeHtml(parcel.code)}" />`
+          : `<p class="muted" style="text-align:center">Code manquant — non scannable</p>`
+      }
       <p class="muted" style="text-align:center">Émis le ${escapeHtml(formatDateTime())}</p>
     </div>
   `;

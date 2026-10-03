@@ -1,14 +1,7 @@
 "use client";
 
-import { Home, Package, Settings, Ticket } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
-
-const links = [
-  { href: "/client", label: "Accueil", icon: Home },
-  { href: "/client/parcels", label: "Colis", icon: Package },
-  { href: "/client/tickets", label: "Tickets", icon: Ticket },
-  { href: "/client/settings", label: "Paramètres", icon: Settings },
-];
+import { portalSidebarLinks } from "@/lib/portal-nav-config";
 
 export default function ClientLayout({
   children,
@@ -20,7 +13,7 @@ export default function ClientLayout({
       roles={["CLIENT"]}
       title="Client"
       subtitle="Tableau de bord"
-      links={links}
+      links={portalSidebarLinks("CLIENT")}
     >
       {children}
     </RequireRole>
