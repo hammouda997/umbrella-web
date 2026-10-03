@@ -1,0 +1,141 @@
+import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+
+export const STATUS_CATEGORY_ICONS = [
+  "package",
+  "clock",
+  "truck",
+  "check",
+  "return",
+  "coins",
+  "alert",
+] as const;
+
+export type StatusCategoryIcon = (typeof STATUS_CATEGORY_ICONS)[number];
+
+export const TOTAL_CATEGORY_KEY = "TOTAL";
+
+export type StatusCategory = {
+  id: number;
+  key: string;
+  label: string;
+  color: string;
+  icon: StatusCategoryIcon;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type StatusCategoryInput = {
+  key: string;
+  label: string;
+  color: string;
+  icon: StatusCategoryIcon;
+  sortOrder?: number;
+  isActive?: boolean;
+};
+
+export const STATUS_CATEGORY_ICON_LABELS: Record<StatusCategoryIcon, string> = {
+  package: "Colis",
+  clock: "Horloge",
+  truck: "Camion",
+  check: "Validé",
+  return: "Retour",
+  coins: "Pièces",
+  alert: "Alerte",
+};
+
+export const CREATABLE_CATEGORY_KEYS: Array<{ key: string; label: string }> = [
+  { key: TOTAL_CATEGORY_KEY, label: "Total" },
+  ...Object.entries(STATUS_META).map(([key, meta]) => ({
+    key,
+    label: meta.label,
+  })),
+];
+
+export const DEFAULT_STATUS_CATEGORIES: Omit<
+  StatusCategory,
+  "id" | "isActive"
+>[] = [
+  {
+    key: TOTAL_CATEGORY_KEY,
+    label: "Total",
+    color: "#E11D48",
+    icon: "package",
+    sortOrder: 0,
+  },
+  {
+    key: "EN_ATTENTE",
+    label: "En attente",
+    color: "#00875A",
+    icon: "clock",
+    sortOrder: 1,
+  },
+  {
+    key: "AU_DEPOT",
+    label: "Au dépôt",
+    color: "#0EA5E9",
+    icon: "truck",
+    sortOrder: 2,
+  },
+  {
+    key: "EN_COURS",
+    label: "En cours",
+    color: "#0065FF",
+    icon: "truck",
+    sortOrder: 3,
+  },
+  {
+    key: "A_VERIFIER",
+    label: "À vérifier",
+    color: "#EC4899",
+    icon: "alert",
+    sortOrder: 4,
+  },
+  {
+    key: "LIVRES",
+    label: "Livrés",
+    color: "#6554C0",
+    icon: "check",
+    sortOrder: 5,
+  },
+  {
+    key: "LIVRES_PAYES",
+    label: "Livrés payés",
+    color: "#14B8A6",
+    icon: "coins",
+    sortOrder: 6,
+  },
+  {
+    key: "RETOUR_DEPOT",
+    label: "Retour dépôt",
+    color: "#FFAB00",
+    icon: "return",
+    sortOrder: 7,
+  },
+];
+
+export function isStatusCategoryIcon(
+  value: string,
+): value is StatusCategoryIcon {
+  return (STATUS_CATEGORY_ICONS as readonly string[]).includes(value);
+}
+
+export function activeStatusKeys(categories: StatusCategory[]): StatusKey[] {
+  return categories
+    .filter(
+      (c) => c.isActive && c.key !== TOTAL_CATEGORY_KEY,
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((c) => c.key as StatusKey);
+}
+
+export function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "").trim();
+  if (normalized.length !== 6) return `rgba(225, 29, 72, ${alpha})`;
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) {
+    return `rgba(225, 29, 72, ${alpha})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

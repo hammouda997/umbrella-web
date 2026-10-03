@@ -1,7 +1,12 @@
-import { DASHBOARD_STATUS_KEYS } from "@/lib/dashboard-statuses";
+import {
+  DEFAULT_STATUS_CATEGORIES,
+  TOTAL_CATEGORY_KEY,
+  type StatusCategory,
+  type StatusCategoryIcon,
+} from "@/lib/status-categories";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 
-/** Unique visual tone per KPI card (must not reuse across dashboard statuses). */
+/** Unique visual tone per KPI card (fallback when no custom color). */
 export type OpsKpiTone =
   | "brand"
   | "green"
@@ -20,169 +25,98 @@ export type OpsKpi = {
   label: string;
   value: string;
   href: string;
-  icon: "package" | "clock" | "truck" | "check" | "return" | "coins" | "alert";
+  icon: StatusCategoryIcon;
   tone: OpsKpiTone;
+  /** Hex color chosen by super-admin; drives card chrome when set. */
+  color: string;
   delta?: string;
   deltaTone?: "up" | "down" | "flat";
   accent: string;
   glow: string;
 };
 
-const STATUS_KPI_STYLE: Record<
-  StatusKey,
-  Pick<OpsKpi, "icon" | "tone" | "accent" | "glow">
-> = {
-  NON_SERIEUX: {
-    icon: "alert",
-    tone: "rose",
-    accent: "bg-[#3a1a1f] text-[#fb7185]",
-    glow: "shadow-[0_0_32px_rgba(225,29,72,0.14)]",
-  },
-  EN_ATTENTE: {
-    icon: "clock",
-    tone: "green",
-    accent: "bg-[#14291f] text-[#34d399]",
-    glow: "shadow-[0_0_32px_rgba(16,185,129,0.14)]",
-  },
-  A_ENLEVER: {
-    icon: "package",
-    tone: "pink",
-    accent: "bg-[#2a1f36] text-[#d8b4fe]",
-    glow: "shadow-[0_0_32px_rgba(168,85,247,0.12)]",
-  },
-  ENLEVES: {
-    icon: "package",
-    tone: "violet",
-    accent: "bg-[#2a1f36] text-[#d8b4fe]",
-    glow: "shadow-[0_0_32px_rgba(168,85,247,0.12)]",
-  },
-  AU_DEPOT: {
-    icon: "truck",
-    tone: "sky",
-    accent: "bg-[#152536] text-[#38bdf8]",
-    glow: "shadow-[0_0_32px_rgba(14,165,233,0.14)]",
-  },
-  RETOUR_DEPOT: {
-    icon: "return",
-    tone: "orange",
-    accent: "bg-[#2f2414] text-[#fbbf24]",
-    glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
-  },
-  EN_COURS: {
-    icon: "truck",
-    tone: "blue",
-    accent: "bg-[#152536] text-[#38bdf8]",
-    glow: "shadow-[0_0_32px_rgba(14,165,233,0.14)]",
-  },
-  A_VERIFIER: {
-    icon: "alert",
-    tone: "pink",
-    accent: "bg-[#3a1a28] text-[#fda4af]",
-    glow: "shadow-[0_0_32px_rgba(244,63,94,0.12)]",
-  },
-  LIVRES: {
-    icon: "check",
-    tone: "violet",
-    accent: "bg-[#261a3a] text-[#c4b5fd]",
-    glow: "shadow-[0_0_32px_rgba(139,92,246,0.14)]",
-  },
-  LIVRES_PAYES: {
-    icon: "coins",
-    tone: "teal",
-    accent: "bg-[#14291f] text-[#6ee7b7]",
-    glow: "shadow-[0_0_32px_rgba(16,185,129,0.12)]",
-  },
-  ECHANGES: {
-    icon: "return",
-    tone: "gold",
-    accent: "bg-[#2f2414] text-[#fbbf24]",
-    glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
-  },
-  REMBOURSES: {
-    icon: "coins",
-    tone: "amber",
-    accent: "bg-[#2f2414] text-[#fbbf24]",
-    glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
-  },
-  RETOUR_DEFINITIF: {
-    icon: "return",
-    tone: "orange",
-    accent: "bg-[#2f2414] text-[#fbbf24]",
-    glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
-  },
-  RETOUR_INTER_AGENCE: {
-    icon: "return",
-    tone: "amber",
-    accent: "bg-[#2f2414] text-[#fbbf24]",
-    glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
-  },
-  RETOUR_EXPEDITEURS: {
-    icon: "return",
-    tone: "gold",
-    accent: "bg-[#2f2414] text-[#fbbf24]",
-    glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
-  },
-  RETOUR_RECU: {
-    icon: "return",
-    tone: "slate",
-    accent: "bg-[#2f2414] text-[#fbbf24]",
-    glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
-  },
-  SAISIE_DOUANE: {
-    icon: "alert",
-    tone: "slate",
-    accent: "bg-[#2a2a2a] text-[#a3a3a3]",
-    glow: "",
-  },
+const TONE_BY_KEY: Partial<Record<string, OpsKpiTone>> = {
+  [TOTAL_CATEGORY_KEY]: "brand",
+  NON_SERIEUX: "rose",
+  EN_ATTENTE: "green",
+  A_ENLEVER: "pink",
+  ENLEVES: "violet",
+  AU_DEPOT: "sky",
+  RETOUR_DEPOT: "orange",
+  EN_COURS: "blue",
+  A_VERIFIER: "pink",
+  LIVRES: "violet",
+  LIVRES_PAYES: "teal",
+  ECHANGES: "gold",
+  REMBOURSES: "amber",
+  RETOUR_DEFINITIF: "orange",
+  RETOUR_INTER_AGENCE: "amber",
+  RETOUR_EXPEDITEURS: "gold",
+  RETOUR_RECU: "slate",
+  SAISIE_DOUANE: "slate",
 };
 
-/** Build ops KPI cards from real status counts (no synthetic “late” / fake deltas). */
+function categoryList(
+  categories?: StatusCategory[] | null,
+): Array<Pick<StatusCategory, "key" | "label" | "color" | "icon" | "sortOrder" | "isActive">> {
+  if (categories && categories.length > 0) {
+    return [...categories]
+      .filter((c) => c.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  }
+  return DEFAULT_STATUS_CATEGORIES.map((c) => ({ ...c, isActive: true }));
+}
+
+/** Build ops KPI cards from real status counts + category styling. */
 export function buildOpsStatusKpis({
   basePath,
   countsByStatus,
-  totalLabel = "Total",
+  totalLabel,
   totalCount,
-  keys = DASHBOARD_STATUS_KEYS,
+  categories,
 }: {
   basePath: string;
   countsByStatus: Map<string, number> | Record<string, number>;
   totalLabel?: string;
-  /** When set, Total card uses this (e.g. all parcels) instead of sum of `keys`. */
+  /** When set, Total card uses this (e.g. all parcels) instead of sum of status keys. */
   totalCount?: number;
-  keys?: StatusKey[];
+  categories?: StatusCategory[] | null;
 }): OpsKpi[] {
   const get = (key: string) => {
     if (countsByStatus instanceof Map) return countsByStatus.get(key) ?? 0;
     return countsByStatus[key] ?? 0;
   };
 
-  const keyedTotal = keys.reduce((sum, key) => sum + get(key), 0);
-  const cards: OpsKpi[] = [
-    {
-      label: totalLabel,
-      value: String(totalCount ?? keyedTotal),
-      href: `${basePath}/parcels`,
-      icon: "package",
-      tone: "brand",
-      accent: "bg-[#3a1a1f] text-[#fb7185]",
-      glow: "shadow-[0_0_32px_rgba(225,29,72,0.14)]",
-    },
-  ];
+  const active = categoryList(categories);
+  const statusKeys = active
+    .map((c) => c.key)
+    .filter((key) => key !== TOTAL_CATEGORY_KEY);
+  const keyedTotal = statusKeys.reduce((sum, key) => sum + get(key), 0);
 
-  for (const key of keys) {
-    const style = STATUS_KPI_STYLE[key];
-    cards.push({
-      label: STATUS_META[key].label,
-      value: String(get(key)),
-      href: `${basePath}/parcels?status=${encodeURIComponent(key)}`,
-      icon: style.icon,
-      tone: style.tone,
-      accent: style.accent,
-      glow: style.glow,
-    });
-  }
+  return active.map((cat) => {
+    const isTotal = cat.key === TOTAL_CATEGORY_KEY;
+    const label =
+      isTotal && totalLabel
+        ? totalLabel
+        : cat.label || STATUS_META[cat.key as StatusKey]?.label || cat.key;
+    const value = isTotal
+      ? String(totalCount ?? keyedTotal)
+      : String(get(cat.key));
+    const href = isTotal
+      ? `${basePath}/parcels`
+      : `${basePath}/parcels?status=${encodeURIComponent(cat.key)}`;
 
-  return cards;
+    return {
+      label,
+      value,
+      href,
+      icon: cat.icon,
+      tone: TONE_BY_KEY[cat.key] ?? "slate",
+      color: cat.color,
+      accent: "",
+      glow: "",
+    };
+  });
 }
 
 export function countByStatus(

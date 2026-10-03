@@ -6,6 +6,10 @@ import { OpsDashboardLoader } from "@/components/OpsDashboardLoader";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { buildOpsStatusKpis, countByStatus } from "@/lib/ops-status-kpis";
+import {
+  isStatusCategoryIcon,
+  type StatusCategory,
+} from "@/lib/status-categories";
 
 type ParcelRow = {
   id: number;
@@ -21,6 +25,7 @@ type ParcelRow = {
 export default function LivreurPage() {
   const { session } = useAuth();
   const [parcels, setParcels] = useState<ParcelRow[]>([]);
+  const [categories, setCategories] = useState<StatusCategory[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const firstName = session?.user.name?.split(/\s+/)[0] ?? "";
@@ -28,8 +33,18 @@ export default function LivreurPage() {
   useEffect(() => {
     if (!session?.accessToken) return;
     setLoading(true);
-    apiFetch<ParcelRow[]>("/parcels", { token: session.accessToken })
-      .then(setParcels)
+    Promise.all([
+      apiFetch<ParcelRow[]>("/parcels", { token: session.accessToken }),
+      apiFetch<StatusCategory[]>("/status-categories", {
+        token: session.accessToken,
+      }).catch(() => [] as StatusCategory[]),
+    ])
+      .then(([list, cats]) => {
+        setParcels(list);
+        setCategories(
+          cats.filter((c) => isStatusCategoryIcon(String(c.icon))),
+        );
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [session]);
@@ -61,8 +76,9 @@ export default function LivreurPage() {
         countsByStatus: countByStatus(parcels),
         totalLabel: "Mes colis",
         totalCount: parcels.length,
+        categories,
       }),
-    [parcels],
+    [categories, parcels],
   );
 
   const dayKeys = useMemo(() => {

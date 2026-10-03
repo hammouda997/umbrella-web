@@ -24,6 +24,12 @@ import {
 } from "@/lib/parcel-transitions";
 import { STATUS_ORDER } from "@/lib/portal-nav";
 import { PORTAL_BY_ROLE, type AppRole } from "@/lib/roles";
+import {
+  DEFAULT_STATUS_CATEGORIES,
+  isStatusCategoryIcon,
+  type StatusCategory,
+  type StatusCategoryIcon,
+} from "@/lib/status-categories";
 import { STATUS_META } from "@/lib/status-meta";
 
 /**
@@ -31,7 +37,7 @@ import { STATUS_META } from "@/lib/status-meta";
  * so the UI behaves the same with NEXT_PUBLIC_USE_MOCK=true or against umbrella/api.
  */
 
-const STORAGE_KEY = "umbrella.mock-db.v2";
+const STORAGE_KEY = "umbrella.mock-db.v3";
 export const MOCK_RESET_EVENT = "umbrella:mock-db-reset";
 
 type MockDb = {
@@ -40,6 +46,7 @@ type MockDb = {
   tickets: MockTicket[];
   payments: MockPayment[];
   zones: MockZone[];
+  statusCategories: StatusCategory[];
 };
 
 type Actor = { id: number; role: AppRole; name: string; email: string; phone: string };
@@ -90,6 +97,18 @@ export const EVENT_LABEL: Record<string, string> = {
 
 let cache: MockDb | null = null;
 
+function seedStatusCategories(): StatusCategory[] {
+  return DEFAULT_STATUS_CATEGORIES.map((row, index) => ({
+    id: index + 1,
+    key: row.key,
+    label: row.label,
+    color: row.color,
+    icon: row.icon,
+    sortOrder: row.sortOrder,
+    isActive: true,
+  }));
+}
+
 function seedDb(): MockDb {
   const seededAt = new Date().toISOString();
   return structuredClone({
@@ -101,15 +120,21 @@ function seedDb(): MockDb {
     tickets: MOCK_TICKETS,
     payments: MOCK_PAYMENTS,
     zones: MOCK_ZONES,
+    statusCategories: seedStatusCategories(),
   });
 }
 
 function isMockDb(value: unknown): value is MockDb {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  return ["users", "parcels", "tickets", "payments", "zones"].every((k) =>
+  const baseOk = ["users", "parcels", "tickets", "payments", "zones"].every((k) =>
     Array.isArray(v[k]),
   );
+  if (!baseOk) return false;
+  if (!Array.isArray(v.statusCategories)) {
+    v.statusCategories = seedStatusCategories();
+  }
+  return true;
 }
 
 function db(): MockDb {
@@ -1178,6 +1203,88 @@ const ROUTES: Route[] = [
           p.zoneId = null;
         }
       }
+      commit();
+      return { id, deleted: true };
+    },
+  },
+  {
+    method: "GET",
+    pattern: /^\/status-categories$/,
+    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR", "CLIENT"],
+    handler: () =>
+      [...db().statusCategories].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.id - b.id,
+      ),
+  },
+  {
+    method: "POST",
+    pattern: /^\/status-categories$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ body }) => {
+      const store = db();
+      const key = String(body.key ?? "");
+      if (store.statusCategories.some((c) => c.key === key)) {
+        throw new MockHttpError(409, `Category ${key} already exists`);
+      }
+      if (!isStatusCategoryIcon(String(body.icon ?? ""))) {
+        throw new MockHttpError(400, "Invalid icon");
+      }
+      const row: StatusCategory = {
+        id: nextId(store.statusCategories),
+        key,
+        label: String(body.label ?? "").trim(),
+        color: String(body.color ?? "#E11D48").toUpperCase(),
+        icon: body.icon as StatusCategoryIcon,
+        sortOrder:
+          typeof body.sortOrder === "number"
+            ? body.sortOrder
+            : store.statusCategories.length,
+        isActive: body.isActive !== false,
+      };
+      store.statusCategories.push(row);
+      commit();
+      return row;
+    },
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/status-categories\/(\d+)$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ params, body }) => {
+      const store = db();
+      const row = store.statusCategories.find((c) => c.id === Number(params[0]));
+      if (!row) throw new MockHttpError(404, "Category not found");
+      if (body.key && body.key !== row.key) {
+        if (store.statusCategories.some((c) => c.key === body.key)) {
+          throw new MockHttpError(409, `Category ${body.key} already exists`);
+        }
+        row.key = String(body.key);
+      }
+      if (typeof body.label === "string") row.label = body.label.trim();
+      if (typeof body.color === "string") row.color = body.color.toUpperCase();
+      if (typeof body.icon === "string") {
+        if (!isStatusCategoryIcon(body.icon)) {
+          throw new MockHttpError(400, "Invalid icon");
+        }
+        row.icon = body.icon;
+      }
+      if (typeof body.sortOrder === "number") row.sortOrder = body.sortOrder;
+      if (typeof body.isActive === "boolean") row.isActive = body.isActive;
+      commit();
+      return row;
+    },
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/status-categories\/(\d+)$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ params }) => {
+      const id = Number(params[0]);
+      const store = db();
+      if (!store.statusCategories.some((c) => c.id === id)) {
+        throw new MockHttpError(404, "Category not found");
+      }
+      store.statusCategories = store.statusCategories.filter((c) => c.id !== id);
       commit();
       return { id, deleted: true };
     },

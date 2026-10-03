@@ -8,6 +8,8 @@ import { OpsDashboardLoader } from "@/components/OpsDashboardLoader";
 import { apiFetch, type StatusCard } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { buildOpsStatusKpis } from "@/lib/ops-status-kpis";
+import type { StatusCategory } from "@/lib/status-categories";
+import { isStatusCategoryIcon } from "@/lib/status-categories";
 
 gsap.registerPlugin(useGSAP);
 
@@ -64,6 +66,7 @@ export function AdminNavexDashboard({
   const root = useRef<HTMLDivElement>(null);
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [statusCards, setStatusCards] = useState<StatusCard[]>([]);
+  const [categories, setCategories] = useState<StatusCategory[]>([]);
   const [parcels, setParcels] = useState<RecentParcel[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,11 +83,17 @@ export function AdminNavexDashboard({
         token: session.accessToken,
       }),
       apiFetch<RecentParcel[]>("/parcels", { token: session.accessToken }),
+      apiFetch<StatusCategory[]>("/status-categories", {
+        token: session.accessToken,
+      }).catch(() => [] as StatusCategory[]),
     ])
-      .then(([counts, stats, list]) => {
+      .then(([counts, stats, list, cats]) => {
         setStatusCards(counts);
         setAnalytics(stats);
         setParcels(list);
+        setCategories(
+          cats.filter((c) => isStatusCategoryIcon(String(c.icon))),
+        );
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
@@ -112,8 +121,9 @@ export function AdminNavexDashboard({
       countsByStatus,
       totalLabel: isSender ? "Mes colis" : "Total",
       totalCount: analytics?.kpis.total,
+      categories,
     });
-  }, [analytics?.kpis.total, basePath, isSender, statusCards]);
+  }, [analytics?.kpis.total, basePath, categories, isSender, statusCards]);
 
   useGSAP(
     () => {

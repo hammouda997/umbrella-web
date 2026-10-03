@@ -28,6 +28,7 @@ import {
 import { HeroVanScene } from "@/components/landing/HeroVanScene";
 import { cn } from "@/lib/cn";
 import { type OpsKpi, type OpsKpiTone } from "@/lib/ops-status-kpis";
+import { hexToRgba } from "@/lib/status-categories";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 import { SortableTh, useTableSort } from "@/lib/table-sort";
 
@@ -367,8 +368,9 @@ function OpsKpiCard({
   kpi: OpsKpi;
   className?: string;
 }) {
-  const Icon = ICON_MAP[kpi.icon];
+  const Icon = ICON_MAP[kpi.icon] ?? ICON_MAP.package;
   const theme = KPI_TONE_THEME[kpi.tone];
+  const color = kpi.color?.startsWith("#") ? kpi.color : null;
   const deltaTone =
     kpi.deltaTone === "down"
       ? "text-rose-400"
@@ -381,23 +383,43 @@ function OpsKpiCard({
       href={kpi.href}
       className={cn(
         "relative min-h-[5.5rem] min-w-0 overflow-hidden rounded-2xl border bg-ops-surface px-3 py-3 transition hover:brightness-110 lg:min-h-0 lg:px-4 lg:py-4",
-        theme.border,
-        theme.glow,
+        color ? "border-transparent" : theme.border,
+        color ? undefined : theme.glow,
         className,
       )}
+      style={
+        color
+          ? {
+              borderColor: hexToRgba(color, 0.45),
+              boxShadow: `0 0 18px ${hexToRgba(color, 0.22)}`,
+            }
+          : undefined
+      }
     >
       <div
-        className={`pointer-events-none absolute inset-0 ${theme.wash}`}
+        className={cn(
+          "pointer-events-none absolute inset-0",
+          color ? undefined : theme.wash,
+        )}
+        style={color ? { backgroundColor: hexToRgba(color, 0.12) } : undefined}
         aria-hidden
       />
       <Icon
-        className={`pointer-events-none absolute -bottom-2 -right-1 h-14 w-14 opacity-[0.12] lg:h-[4.75rem] lg:w-[4.75rem] ${theme.watermark}`}
+        className={cn(
+          "pointer-events-none absolute -bottom-2 -right-1 h-14 w-14 opacity-[0.12] lg:h-[4.75rem] lg:w-[4.75rem]",
+          color ? undefined : theme.watermark,
+        )}
+        style={color ? { color } : undefined}
         strokeWidth={1.15}
         aria-hidden
       />
       <div className="relative flex items-start gap-3 lg:grid lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-x-3">
         <span
-          className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white lg:col-start-1 lg:row-span-3 lg:h-11 lg:w-11 ${theme.badge}`}
+          className={cn(
+            "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white lg:col-start-1 lg:row-span-3 lg:h-11 lg:w-11",
+            color ? undefined : theme.badge,
+          )}
+          style={color ? { backgroundColor: color } : undefined}
         >
           <Icon className="h-5 w-5" strokeWidth={2.25} />
         </span>

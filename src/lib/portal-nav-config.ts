@@ -5,6 +5,7 @@ import {
   Home,
   MapPin,
   Package,
+  Palette,
   RefreshCw,
   ScanLine,
   Settings,
@@ -111,7 +112,7 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
   }
 
   // ADMIN + SUPER_ADMIN
-  return [
+  const items: PortalNavDef[] = [
     { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
     {
       href: `${base}/parcels`,
@@ -135,8 +136,18 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
     { href: `${base}/users`, label: "Utilisateurs", icon: Users },
     { href: `${base}/analytics`, label: "Rapports", icon: BarChart3 },
     { href: `${base}/zones`, label: "Entrepôt", icon: Warehouse },
-    { href: `${base}/settings`, label: "Paramètres", icon: Settings },
   ];
+
+  if (role === "SUPER_ADMIN") {
+    items.push({
+      href: `${base}/categories`,
+      label: "Catégories",
+      icon: Palette,
+    });
+  }
+
+  items.push({ href: `${base}/settings`, label: "Paramètres", icon: Settings });
+  return items;
 }
 
 export function portalSidebarLinks(role: AppRole): PortalNavDef[] {
