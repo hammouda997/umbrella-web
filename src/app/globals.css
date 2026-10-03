@@ -21,6 +21,20 @@
   --shadow-soft: 0 10px 30px rgba(26, 20, 20, 0.08);
   --ink-rgb: 26 20 20;
   --ink-muted-rgb: 107 94 86;
+
+  /* Ops portal — light */
+  --ops-page: #f3efe8;
+  --ops-surface: #ffffff;
+  --ops-surface-2: #ebe4db;
+  --ops-sidebar: #ffffff;
+  --ops-accent: #e11d48;
+  --ops-accent-soft: #be123c;
+  --ops-accent-muted: #fb7185;
+  --ops-ink-rgb: 11 14 20;
+  --ops-shadow: 0 1px 3px rgba(11, 14, 20, 0.06), 0 8px 24px rgba(11, 14, 20, 0.04);
+  --ops-header: color-mix(in srgb, var(--ops-page) 92%, transparent);
+  --ops-scroll-thumb: rgba(11, 14, 20, 0.18);
+  --ops-card-border: rgb(11 14 20 / 0.1);
 }
 
 html.dark {
@@ -43,6 +57,20 @@ html.dark {
   --ink-rgb: 255 255 255;
   --ink-muted-rgb: 232 228 223;
   color-scheme: dark;
+
+  /* Ops portal — dark */
+  --ops-page: #0b0e14;
+  --ops-surface: #12161e;
+  --ops-surface-2: #161b24;
+  --ops-sidebar: #0b0e14;
+  --ops-accent: #e11d48;
+  --ops-accent-soft: #be123c;
+  --ops-accent-muted: #fb7185;
+  --ops-ink-rgb: 255 255 255;
+  --ops-shadow: 0 0 16px rgba(0, 0, 0, 0.25);
+  --ops-header: color-mix(in srgb, var(--ops-page) 95%, transparent);
+  --ops-scroll-thumb: rgba(255, 255, 255, 0.22);
+  --ops-card-border: rgb(255 255 255 / 0.05);
 }
 
 html {
@@ -54,11 +82,6 @@ body {
   background: var(--color-page);
   min-height: 100dvh;
   overflow-x: clip;
-}
-
-html.dark body,
-html.dark main {
-  color: #ffffff;
 }
 
 html.dark input,
@@ -92,13 +115,35 @@ html.dark textarea {
 }
 
 .portal-sidebar {
-  background-color: #1a1414;
-  color: #ffffff;
+  background-color: var(--ops-sidebar);
+  color: rgb(var(--ops-ink-rgb));
+  border-right: 1px solid rgb(var(--ops-ink-rgb) / 0.08);
+}
+
+.portal-shell {
+  background-color: var(--ops-page);
+  color: rgb(var(--ops-ink-rgb));
+}
+
+.portal-header {
+  background-color: var(--ops-header);
+  border-bottom-color: rgb(var(--ops-ink-rgb) / 0.08);
+}
+
+.ops-board {
+  background-color: var(--ops-page);
+  color: rgb(var(--ops-ink-rgb));
+}
+
+.ops-card {
+  background-color: var(--ops-surface);
+  border-color: var(--ops-card-border);
+  box-shadow: var(--ops-shadow);
 }
 
 .portal-sidebar-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: var(--ops-scroll-thumb) transparent;
 }
 
 .portal-sidebar-scroll::-webkit-scrollbar {
@@ -110,12 +155,12 @@ html.dark textarea {
 }
 
 .portal-sidebar-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.22);
+  background-color: var(--ops-scroll-thumb);
   border-radius: 999px;
 }
 
 .portal-sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.35);
+  background-color: rgb(var(--ops-ink-rgb) / 0.35);
 }
 
 .landing {
@@ -164,7 +209,13 @@ html.dark textarea {
 
 /* Two identical sequences in the track → -50% is a seamless seam. Always runs. */
 .landing .marquee-track {
-  animation: landing-marquee 36s linear infinite;
+  animation: landing-marquee 28s linear infinite;
+}
+
+@media (min-width: 640px) {
+  .landing .marquee-track {
+    animation-duration: 36s;
+  }
 }
 
 .landing .case-media img {

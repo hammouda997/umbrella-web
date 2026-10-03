@@ -74,7 +74,7 @@ export function TimeSeriesSvg({
 
   if (!n || !active.length) {
     return (
-      <div className="flex h-40 items-center justify-center text-sm text-ink-muted">
+      <div className="flex h-40 items-center justify-center text-sm text-ops-ink/50">
         Aucune série sélectionnée
       </div>
     );
@@ -109,7 +109,7 @@ export function TimeSeriesSvg({
                 <text
                   x={8}
                   y={y + 4}
-                  className="fill-ink-muted text-[10px]"
+                  className="fill-ops-ink/45 text-[10px]"
                 >
                   {Math.round(max * t)}
                 </text>
@@ -146,7 +146,7 @@ export function TimeSeriesSvg({
                   x={gx + (groupW - barGap * 2) / 2}
                   y={height - 6}
                   textAnchor="middle"
-                  className="fill-ink-muted text-[11px]"
+                  className="fill-ops-ink/45 text-[11px]"
                 >
                   {label}
                 </text>
@@ -182,7 +182,7 @@ export function TimeSeriesSvg({
                 stroke="currentColor"
                 strokeOpacity={0.08}
               />
-              <text x={8} y={y + 4} className="fill-ink-muted text-[10px]">
+              <text x={8} y={y + 4} className="fill-ops-ink/45 text-[10px]">
                 {Math.round(max * t)}
               </text>
             </g>
@@ -253,7 +253,7 @@ export function TimeSeriesSvg({
               x={x}
               y={height - 6}
               textAnchor="middle"
-              className="fill-ink-muted text-[11px]"
+              className="fill-ops-ink/45 text-[11px]"
             >
               {label}
             </text>
@@ -310,7 +310,7 @@ export function DonutSvg({
 
   if (total <= 0) {
     return (
-      <div className="flex h-52 items-center justify-center text-sm text-ink-muted">
+      <div className="flex h-52 items-center justify-center text-sm text-ops-ink/50">
         Pas de données
       </div>
     );
@@ -353,7 +353,7 @@ export function DonutSvg({
             x={cx}
             y={cy - 4}
             textAnchor="middle"
-            className="fill-ink text-lg font-extrabold"
+            className="fill-ops-ink text-lg font-extrabold"
           >
             {centerValue}
           </text>
@@ -363,7 +363,7 @@ export function DonutSvg({
             x={cx}
             y={cy + 16}
             textAnchor="middle"
-            className="fill-ink-muted text-[11px]"
+            className="fill-ops-ink/45 text-[11px]"
           >
             {centerLabel}
           </text>
@@ -377,14 +377,14 @@ export function DonutSvg({
               key={s.key}
               className="flex items-center justify-between gap-3"
             >
-              <span className="inline-flex items-center gap-2 font-medium text-ink">
+              <span className="inline-flex items-center gap-2 font-medium text-ops-ink">
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-sm"
                   style={{ backgroundColor: s.color }}
                 />
                 {s.label}
               </span>
-              <span className="tabular-nums text-ink-muted">
+              <span className="tabular-nums text-ops-ink/50">
                 {s.value} · {pct}%
               </span>
             </li>
@@ -399,7 +399,7 @@ export function RateMeter({
   label,
   value,
   hint,
-  color = "var(--color-brand)",
+  color = "#E11D48",
 }: {
   label: string;
   value: number;
@@ -418,13 +418,13 @@ export function RateMeter({
   const showValue = clamped > 0.5;
 
   return (
-    <article className="rounded-xl border border-cream bg-surface px-3 py-2.5">
-      <p className="text-[11px] font-semibold text-ink-muted">{label}</p>
+    <article className="rounded-xl border border-ops-card bg-ops-surface px-3 py-2.5">
+      <p className="text-[11px] font-semibold text-ops-ink/50">{label}</p>
       <div className="mt-1 flex justify-center">
         <svg width={size} height={96} viewBox={`0 0 ${size} 110`} aria-hidden>
           <path
             d={arcPath(cx, cy, r, r - 12, start, end)}
-            fill="var(--color-surface-2)"
+            fill="var(--ops-surface-2)"
           />
           {showValue ? (
             <path
@@ -436,30 +436,30 @@ export function RateMeter({
             x={cx}
             y={cy - 8}
             textAnchor="middle"
-            className="fill-ink text-2xl font-extrabold"
+            className="fill-ops-ink text-2xl font-extrabold"
           >
             {clamped}%
           </text>
         </svg>
       </div>
-      <p className="text-center text-[11px] text-ink-muted">{hint}</p>
+      <p className="text-center text-[11px] text-ops-ink/50">{hint}</p>
     </article>
   );
 }
 
 export const SERIES_COLORS: Record<string, string> = {
-  creations: "var(--color-brand)",
-  delivered: "var(--color-gold)",
-  external: "var(--chart-ext)",
-  internal: "var(--chart-int)",
-  returns: "var(--color-brand-soft)",
-  awaiting: "#986A36",
-  inProgress: "#5c4842",
-  exchanges: "#e1d2a7",
-  disponible: "var(--color-brand)",
-  enDemande: "#986A36",
-  aVerser: "#5c4842",
-  verse: "#1a1414",
-  encaisse: "var(--color-gold)",
-  retoursMontant: "var(--color-brand-soft)",
+  creations: "#E11D48",
+  delivered: "#00875A",
+  external: "var(--ops-accent)",
+  internal: "#0065FF",
+  returns: "#FB7185",
+  awaiting: "#FFAB00",
+  inProgress: "#0065FF",
+  exchanges: "#6554C0",
+  disponible: "#E11D48",
+  enDemande: "#FFAB00",
+  aVerser: "#0065FF",
+  verse: "#64748B",
+  encaisse: "#00875A",
+  retoursMontant: "#E11D48",
 };

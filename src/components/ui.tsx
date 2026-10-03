@@ -24,21 +24,27 @@ export function PageHeader({
   eyebrow?: string;
 }) {
   return (
-    <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <header className="flex flex-col items-center gap-4 text-center md:flex-row md:items-end md:justify-between md:text-left">
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ops-ink/55">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink md:text-3xl">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-ops-ink md:text-3xl">
           {title}
         </h1>
         {description ? (
-          <p className="mt-1 max-w-2xl text-sm text-ink-muted">{description}</p>
+          <p className="mx-auto mt-1 max-w-2xl text-sm text-ops-ink/50 md:mx-0">
+            {description}
+          </p>
         ) : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center justify-center gap-2 md:justify-end">
+          {actions}
+        </div>
+      ) : null}
     </header>
   );
 }
@@ -55,15 +61,15 @@ export function EmptyState({
   icon?: LucideIcon;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-cream bg-cream-soft/30 px-6 py-12 text-center">
+    <div className="rounded-2xl border border-dashed border-ops-card bg-ops-page/50 px-6 py-12 text-center">
       {Icon ? (
-        <span className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand/10 text-brand">
+        <span className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-ops-accent/15 text-ops-accent">
           <Icon className="h-5 w-5" aria-hidden />
         </span>
       ) : null}
-      <p className="font-display text-lg font-bold text-ink">{title}</p>
+      <p className="font-display text-lg font-bold text-ops-ink">{title}</p>
       {description ? (
-        <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">{description}</p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-ops-ink/50">{description}</p>
       ) : null}
       {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
     </div>
@@ -73,10 +79,10 @@ export function EmptyState({
 export function LoadingBlock({ rows = 4, label }: { rows?: number; label?: string }) {
   return (
     <div className="space-y-3" role="status" aria-live="polite">
-      {label ? <p className="text-center text-sm text-ink-muted">{label}</p> : null}
+      {label ? <p className="text-center text-sm text-ops-ink/50">{label}</p> : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-2xl bg-cream-soft/70" />
+          <div key={i} className="h-24 animate-pulse rounded-2xl bg-ops-ink/[0.06]" />
         ))}
       </div>
     </div>
@@ -91,7 +97,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-2xl border border-cream bg-surface p-5 shadow-soft", className)}>
+    <div className={cn("rounded-2xl border border-ops-card bg-ops-surface p-5 shadow-ops", className)}>
       {children}
     </div>
   );
@@ -107,7 +113,7 @@ export function ErrorBanner({
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-brand"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ops-accent/25 bg-ops-accent/10 px-4 py-3 text-sm text-ops-accent"
     >
       <span className="inline-flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
@@ -126,11 +132,13 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "gold" | "su
 type ButtonSize = "sm" | "md";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-brand text-white shadow-sm hover:bg-brand-soft",
-  secondary: "border border-cream bg-surface text-ink hover:border-brand hover:text-brand",
-  ghost: "text-ink-muted hover:bg-cream-soft/60 hover:text-ink",
-  danger: "border border-brand/30 bg-brand/5 text-brand hover:bg-brand hover:text-white",
-  gold: "bg-gold text-white shadow-sm hover:brightness-110",
+  primary: "bg-ops-accent text-white shadow-sm hover:bg-ops-accent-soft",
+  secondary:
+    "border border-ops-card bg-ops-surface text-ops-ink hover:border-ops-accent/50 hover:text-ops-accent",
+  ghost: "text-ops-ink/55 hover:bg-ops-ink/[0.06] hover:text-ops-ink",
+  danger:
+    "border border-ops-accent/30 bg-ops-accent/10 text-ops-accent hover:bg-ops-accent hover:text-white",
+  gold: "bg-amber-500 text-[#0B0E14] shadow-sm hover:bg-amber-400",
   success: "bg-emerald-700 text-white shadow-sm hover:bg-emerald-600",
 };
 
@@ -141,7 +149,7 @@ const BUTTON_SIZE: Record<ButtonSize, string> = {
 
 export function buttonClass(variant: ButtonVariant = "primary", size: ButtonSize = "md") {
   return cn(
-    "inline-flex shrink-0 items-center justify-center font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex shrink-0 items-center justify-center font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ops-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ops-page disabled:cursor-not-allowed disabled:opacity-50",
     BUTTON_VARIANT[variant],
     BUTTON_SIZE[size],
   );
@@ -182,7 +190,7 @@ export function Button({
 }
 
 export const inputClass =
-  "w-full rounded-xl border border-cream bg-surface px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-ink-muted/60 focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full rounded-xl border border-ops-card bg-ops-surface px-3 py-2.5 text-sm text-ops-ink outline-none transition placeholder:text-ops-ink/40 focus:border-ops-accent focus:ring-2 focus:ring-ops-accent/20 disabled:cursor-not-allowed disabled:opacity-60";
 
 function FieldShell({
   id,
@@ -202,17 +210,17 @@ function FieldShell({
   return (
     <div className={cn("block text-sm", className)}>
       {label ? (
-        <label htmlFor={id} className="mb-1.5 block font-medium text-ink">
+        <label htmlFor={id} className="mb-1.5 block font-medium text-ops-ink">
           {label}
         </label>
       ) : null}
       {children}
       {error ? (
-        <p id={`${id}-error`} className="mt-1 text-xs font-medium text-brand">
+        <p id={`${id}-error`} className="mt-1 text-xs font-medium text-ops-accent">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1 text-xs text-ink-muted">
+        <p id={`${id}-hint`} className="mt-1 text-xs text-ops-ink/50">
           {hint}
         </p>
       ) : null}
@@ -239,7 +247,7 @@ export function TextField({
         id={fieldId}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
-        className={cn(inputClass, error && "border-brand", className)}
+        className={cn(inputClass, error && "border-ops-accent", className)}
         {...rest}
       />
     </FieldShell>
@@ -312,7 +320,7 @@ export function SearchInput({
     <label className={cn("relative block", className)}>
       <span className="sr-only">{label}</span>
       <Search
-        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ops-ink/40"
         aria-hidden
       />
       <input
@@ -329,15 +337,16 @@ export function SearchInput({
 export type BadgeTone = "neutral" | "success" | "warning" | "danger" | "info" | "brand" | "gold";
 
 const BADGE_TONE: Record<BadgeTone, string> = {
-  neutral: "bg-cream-soft/80 text-ink-muted ring-cream dark:bg-white/10 dark:text-white/80 dark:ring-white/15",
+  neutral:
+    "bg-ops-ink/[0.06] text-ops-ink/50 ring-ops-card dark:bg-white/10 dark:text-white/80 dark:ring-white/15",
   success:
     "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-400/15 dark:text-emerald-300 dark:ring-emerald-400/30",
   warning:
     "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/15 dark:text-amber-200 dark:ring-amber-400/30",
   danger: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-400/15 dark:text-red-300 dark:ring-red-400/30",
   info: "bg-sky-50 text-sky-800 ring-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:ring-sky-400/30",
-  brand: "bg-brand/10 text-brand ring-brand/20",
-  gold: "bg-gold/10 text-gold ring-gold/25",
+  brand: "bg-ops-accent/15 text-ops-accent ring-ops-accent/20",
+  gold: "bg-amber-500/10 text-ops-ink/55 ring-amber-500/25",
 };
 
 export function Badge({
@@ -365,16 +374,39 @@ export function Badge({
   );
 }
 
+function opsStatusTone(status: string): { bg: string; ink: string } {
+  if (status === "EN_ATTENTE" || status === "NON_SERIEUX")
+    return { bg: "#FFAB00", ink: "#0B0E14" };
+  if (status === "LIVRES" || status === "LIVRES_PAYES")
+    return { bg: "#00875A", ink: "#FFFFFF" };
+  if (
+    status === "EN_COURS" ||
+    status === "A_ENLEVER" ||
+    status === "ENLEVES"
+  )
+    return { bg: "#0065FF", ink: "#FFFFFF" };
+  if (
+    status === "AU_DEPOT" ||
+    status === "A_VERIFIER" ||
+    status === "ECHANGES" ||
+    status === "REMBOURSES"
+  )
+    return { bg: "#6554C0", ink: "#FFFFFF" };
+  if (status.startsWith("RETOUR")) return { bg: "#E11D48", ink: "#FFFFFF" };
+  return { bg: "#3F4654", ink: "#FFFFFF" };
+}
+
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const meta = STATUS_META[status as StatusKey];
   if (!meta) return <Badge className={className}>{status.replace(/_/g, " ")}</Badge>;
+  const tone = opsStatusTone(status);
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
         className,
       )}
-      style={{ backgroundColor: meta.color, color: meta.ink ?? "#FFFFFF" }}
+      style={{ backgroundColor: tone.bg, color: tone.ink }}
     >
       <span aria-hidden>{meta.emoji}</span>
       {meta.label}
@@ -396,15 +428,15 @@ export function StatCard({
   tone?: "neutral" | "brand" | "gold" | "success";
 }) {
   const iconTone = {
-    neutral: "bg-cream-soft text-ink",
-    brand: "bg-brand/10 text-brand",
-    gold: "bg-gold/15 text-gold",
+    neutral: "bg-ops-surface-2 text-ops-ink",
+    brand: "bg-ops-accent/15 text-ops-accent",
+    gold: "bg-amber-500/15 text-ops-ink/55",
     success: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   }[tone];
   return (
-    <div className="rounded-2xl border border-cream bg-surface p-4 shadow-soft">
+    <div className="rounded-2xl border border-ops-card bg-ops-surface p-4 shadow-ops">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ops-ink/50">
           {label}
         </p>
         {Icon ? (
@@ -413,8 +445,8 @@ export function StatCard({
           </span>
         ) : null}
       </div>
-      <p className="mt-2 font-display text-2xl font-extrabold tracking-tight text-ink">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-ink-muted">{hint}</p> : null}
+      <p className="mt-2 font-display text-2xl font-extrabold tracking-tight text-ops-ink">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-ops-ink/50">{hint}</p> : null}
     </div>
   );
 }
@@ -434,7 +466,7 @@ export function SegmentedTabs<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-cream bg-cream-soft/40 p-1"
+      className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-ops-card bg-ops-ink/[0.05] p-1"
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -447,7 +479,7 @@ export function SegmentedTabs<T extends string>({
             onClick={() => onChange(opt.value)}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
-              active ? "bg-surface text-brand shadow-sm" : "text-ink-muted hover:text-ink",
+              active ? "bg-ops-surface text-ops-accent shadow-sm" : "text-ops-ink/50 hover:text-ops-ink",
             )}
           >
             {opt.label}
@@ -455,7 +487,7 @@ export function SegmentedTabs<T extends string>({
               <span
                 className={cn(
                   "rounded-full px-1.5 py-px text-[10px]",
-                  active ? "bg-brand/10 text-brand" : "bg-cream-soft text-ink-muted",
+                  active ? "bg-ops-accent/15 text-ops-accent" : "bg-ops-surface-2 text-ops-ink/50",
                 )}
               >
                 {opt.count}
@@ -479,7 +511,7 @@ export function Avatar({ name, className }: { name: string; className?: string }
     <span
       aria-hidden
       className={cn(
-        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-gold text-xs font-bold text-white",
+        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-ops-accent to-amber-600 text-xs font-bold text-white",
         className,
       )}
     >
@@ -500,21 +532,31 @@ export function TableCard({
   className?: string;
 }) {
   return (
-    <div className={cn("overflow-hidden rounded-2xl border border-cream bg-surface shadow-soft", className)}>
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border border-ops-card bg-ops-surface text-ops-ink shadow-ops",
+        className,
+      )}
+    >
       {toolbar ? (
-        <div className="flex flex-col gap-3 border-b border-cream bg-cream-soft/30 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 border-b border-ops-card bg-ops-page/60 px-4 py-3 md:flex-row md:items-center md:justify-between">
           {toolbar}
         </div>
       ) : null}
       <div className="overflow-x-auto">{children}</div>
-      {footer ? <div className="border-t border-cream px-4 py-3">{footer}</div> : null}
+      {footer ? (
+        <div className="border-t border-ops-card px-4 py-3 text-ops-ink/50">
+          {footer}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export const tableClass = "min-w-full text-left text-sm";
+export const tableClass = "min-w-full text-left text-sm text-ops-ink";
 export const theadClass =
-  "bg-cream-soft/50 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-muted";
+  "bg-ops-page/80 text-[11px] font-semibold uppercase tracking-[0.1em] text-ops-ink/45";
 export const thClass = "px-4 py-3 font-semibold";
 export const tdClass = "px-4 py-3 align-middle";
-export const trClass = "border-t border-cream/70 transition hover:bg-brand/[0.03]";
+export const trClass =
+  "border-t border-ops-card transition hover:bg-ops-ink/[0.04]";

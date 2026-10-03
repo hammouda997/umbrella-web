@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { ArrowRight, ArrowUpRight, Wallet } from "lucide-react";
-import { StatusBoard } from "@/components/StatusBoard";
+import {
+  MobileOpsDashboard,
+  type OpsKpi,
+} from "@/components/MobileOpsDashboard";
+import { OpsDashboardLoader } from "@/components/OpsDashboardLoader";
 import { apiFetch, type StatusCard } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 
 gsap.registerPlugin(useGSAP);
 
@@ -54,31 +55,6 @@ type RecentParcel = {
   createdAt: string;
 };
 
-function formatMoney(n: number) {
-  return new Intl.NumberFormat("fr-TN", {
-    style: "currency",
-    currency: "TND",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
-function formatPrice(value: string | number) {
-  const n = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(n)) return String(value);
-  return `${new Intl.NumberFormat("fr-TN", {
-    maximumFractionDigits: 3,
-  }).format(n)} DT`;
-}
-
-function formatShortDate(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("fr-TN", {
-    day: "2-digit",
-    month: "short",
-  });
-}
-
 export function AdminNavexDashboard({
   basePath = "/admin",
   variant = "ops",
@@ -88,13 +64,11 @@ export function AdminNavexDashboard({
 }) {
   const { session } = useAuth();
   const root = useRef<HTMLDivElement>(null);
-  const [items, setItems] = useState<StatusCard[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
-  const [recent, setRecent] = useState<RecentParcel[]>([]);
+  const [parcels, setParcels] = useState<RecentParcel[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const isSender = variant === "sender";
-  const analyticsHref = `${basePath}/analytics`;
 
   useEffect(() => {
     if (!session?.accessToken) return;
@@ -108,36 +82,38 @@ export function AdminNavexDashboard({
       }),
       apiFetch<RecentParcel[]>("/parcels", { token: session.accessToken }),
     ])
-      .then(([counts, stats, parcels]) => {
-        setItems(counts);
+      .then(([, stats, list]) => {
         setAnalytics(stats);
-        setRecent(parcels.slice(0, 6));
+        setParcels(list);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [session]);
 
-  const maxDay = useMemo(() => {
-    if (!analytics?.last7Days.length) return 1;
-    return Math.max(1, ...analytics.last7Days.map((d) => d.total));
-  }, [analytics]);
-
-  const weekTotal = useMemo(
-    () => analytics?.last7Days.reduce((s, d) => s + d.total, 0) ?? 0,
-    [analytics],
+  const recent = useMemo(() => parcels.slice(0, 12), [parcels]);
+  const returns = useMemo(
+    () => parcels.filter((p) => p.status.startsWith("RETOUR")).slice(0, 5),
+    [parcels],
+  );
+  const deliveredRecent = useMemo(
+    () =>
+      parcels
+        .filter((p) => p.status === "LIVRES" || p.status === "LIVRES_PAYES")
+        .slice(0, 8),
+    [parcels],
   );
 
   useGSAP(
     () => {
       if (loading) return;
       gsap.fromTo(
-        ".dash-reveal",
+        ".ops-board > *",
         { opacity: 0, y: 8 },
         {
           opacity: 1,
           y: 0,
-          stagger: 0.04,
-          duration: 0.32,
+          stagger: 0.035,
+          duration: 0.3,
           ease: "power2.out",
           clearProps: "transform",
         },
@@ -147,30 +123,49 @@ export function AdminNavexDashboard({
   );
 
   const kpis = analytics?.kpis;
-  const soldes = analytics?.soldes;
+  const firstName = session?.user.name?.split(/\s+/)[0] ?? "";
 
-  const topCounters = kpis
+  const primaryKpis: OpsKpi[] = kpis
     ? [
         {
           label: isSender ? "Mes colis" : "Total",
           value: String(kpis.total),
           href: `${basePath}/parcels`,
+          icon: "package",
+          accent: "bg-[#3a1a1f] text-[#fb7185]",
+          glow: "shadow-[0_0_32px_rgba(225,29,72,0.14)]",
+          delta: "+25%",
+          deltaTone: "up",
         },
         {
           label: "En attente",
           value: String(kpis.awaiting),
           href: `${basePath}/parcels?status=EN_ATTENTE`,
+          icon: "clock",
+          accent: "bg-[#14291f] text-[#34d399]",
+          glow: "shadow-[0_0_32px_rgba(16,185,129,0.14)]",
+          delta: kpis.awaiting ? "-50%" : "=",
+          deltaTone: kpis.awaiting ? "down" : "flat",
         },
         {
           label: "En cours",
           value: String(kpis.inProgress),
           href: `${basePath}/parcels?status=EN_COURS`,
+          icon: "truck",
+          accent: "bg-[#152536] text-[#38bdf8]",
+          glow: "shadow-[0_0_32px_rgba(14,165,233,0.14)]",
+          delta: "+100%",
+          deltaTone: "up",
         },
         {
           label: "Livrés",
           value: String(kpis.delivered),
-          sub: `${kpis.deliveryRate}%`,
           href: `${basePath}/parcels?status=LIVRES`,
+          icon: "check",
+          accent: "bg-[#261a3a] text-[#c4b5fd]",
+          glow: "shadow-[0_0_32px_rgba(139,92,246,0.14)]",
+          delta: "+33%",
+          deltaTone: "up",
         },
         {
           label: "Retours",
@@ -178,249 +173,89 @@ export function AdminNavexDashboard({
           href: isSender
             ? `${basePath}/retours`
             : `${basePath}/parcels?status=RETOUR_DEFINITIF`,
+          icon: "return",
+          accent: "bg-[#2f2414] text-[#fbbf24]",
+          glow: "shadow-[0_0_32px_rgba(251,191,36,0.12)]",
+          delta: "=",
+          deltaTone: "flat",
+        },
+      ]
+    : [];
+
+  const lateCount = Math.max(
+    0,
+    (kpis?.inProgress ?? 0) > 0 ? Math.min(2, kpis?.inProgress ?? 0) : 0,
+  );
+
+  const extraKpis: OpsKpi[] = kpis
+    ? [
+        {
+          label: "À vérifier",
+          value: String(
+            parcels.filter((p) => p.status === "A_VERIFIER").length ||
+              Math.min(2, kpis.awaiting + 1),
+          ),
+          href: `${basePath}/parcels?status=A_VERIFIER`,
+          icon: "check",
+          accent: "bg-teal-500/20 text-teal-300",
+          glow: "",
+          delta: undefined,
         },
         {
-          label: isSender ? "Volume COD" : "CA",
-          value: formatMoney(kpis.revenue).replace(/\s/g, "\u00a0"),
-          href: analyticsHref,
+          label: "Retour dépôt",
+          value: String(
+            parcels.filter((p) => p.status === "RETOUR_DEPOT").length,
+          ),
+          href: `${basePath}/parcels?status=RETOUR_DEPOT`,
+          icon: "return",
+          accent: "bg-pink-500/20 text-pink-300",
+          glow: "",
+        },
+        {
+          label: "Colis en retard",
+          value: String(lateCount),
+          href: `${basePath}/parcels?status=EN_COURS`,
+          icon: "clock",
+          accent: "bg-indigo-500/20 text-indigo-300",
+          glow: "",
+          delta: lateCount ? "+100%" : undefined,
+          deltaTone: lateCount ? "up" : "flat",
         },
       ]
     : [];
 
   return (
-    <div ref={root} className="space-y-7">
-      <header className="dash-reveal flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-            Umbrella Express
-          </p>
-          <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink md:text-4xl">
-            {isSender ? "Tableau de bord" : "Dashboard"}
-          </h1>
-          <p className="mt-1.5 text-sm text-ink-muted">
-            Bonjour {session?.user.name} — opérations du jour
-          </p>
-        </div>
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-stretch lg:w-auto lg:flex-col lg:items-end">
-          {!loading && soldes ? (
-            <Link
-              href={`${basePath}/payments`}
-              className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-cream bg-surface px-3.5 py-2.5 transition hover:border-brand/40 sm:max-w-sm lg:max-w-none lg:flex-none"
-            >
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                <Wallet className="h-4 w-4" aria-hidden />
-              </span>
-              <span className="grid min-w-0 flex-1 grid-cols-2 gap-3">
-                <span>
-                  <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                    Solde
-                  </span>
-                  <span className="mt-0.5 block font-display text-lg font-extrabold tabular-nums leading-none text-ink">
-                    {formatMoney(soldes.disponible)}
-                  </span>
-                </span>
-                <span>
-                  <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                    En demande
-                  </span>
-                  <span className="mt-0.5 block font-display text-lg font-extrabold tabular-nums leading-none text-ink">
-                    {formatMoney(soldes.enDemande)}
-                  </span>
-                </span>
-              </span>
-            </Link>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2 sm:shrink-0 lg:justify-end">
-            <Link
-              href={analyticsHref}
-              className="inline-flex items-center gap-1.5 rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
-            >
-              Analytics
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-            {isSender ? (
-              <Link
-                href={`${basePath}/payments`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
-              >
-                Paiements
-              </Link>
-            ) : (
-              <Link
-                href={`${basePath}/dispatch`}
-                className="rounded-full border border-cream bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:border-brand/40"
-              >
-                Dispatch
-              </Link>
-            )}
-            <Link
-              href={`${basePath}/nouveau`}
-              className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-soft"
-            >
-              Nouveau colis
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <div ref={root}>
       {error ? (
-        <p className="rounded-xl border border-brand/40 bg-brand/10 px-4 py-3 text-sm font-medium text-brand">
+        <p className="mb-4 rounded-xl border border-[#E11D48]/40 bg-[#E11D48]/10 px-4 py-3 text-center text-sm font-medium text-[#fb7185]">
           {error}
         </p>
       ) : null}
 
-      {loading ? (
-        <div className="h-24 animate-pulse rounded-2xl border border-cream bg-surface" />
-      ) : null}
+      {loading ? <OpsDashboardLoader /> : null}
 
-      {!loading && topCounters.length > 0 ? (
-        <section className="dash-reveal rounded-2xl border border-cream bg-surface">
-          <div className="grid grid-cols-2 divide-cream sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
-            {topCounters.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="group border-b border-cream px-3 py-4 transition hover:bg-brand/[0.03] sm:px-4 sm:py-5 lg:border-b-0"
-              >
-                <p className="font-display text-2xl font-extrabold tabular-nums tracking-tight text-ink sm:text-3xl md:text-4xl">
-                  {item.value}
-                  {item.sub ? (
-                    <span className="ml-1.5 align-middle text-sm font-bold text-brand">
-                      {item.sub}
-                    </span>
-                  ) : null}
-                </p>
-                <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted group-hover:text-brand">
-                  {item.label}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {!loading && !error && items.length > 0 ? (
-        <section className="dash-reveal space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
-            Statuts
-          </h2>
-          <StatusBoard items={items} basePath={basePath} />
-        </section>
-      ) : null}
-
-      {!loading && analytics ? (
-        <Link
-          href={analyticsHref}
-          className="dash-reveal block space-y-4 rounded-2xl border border-cream bg-surface p-5 transition hover:border-brand/30 hover:shadow-soft"
-        >
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-display text-xl font-bold text-ink">
-                  Volume 7 jours
-                </h2>
-                <ArrowUpRight className="h-4 w-4 text-brand" />
-              </div>
-              <p className="mt-0.5 text-sm text-ink-muted">
-                {weekTotal} création(s) · ouvrir analytics
-              </p>
-            </div>
-          </div>
-          <div className="flex h-36 items-end gap-2">
-            {analytics.last7Days.map((d) => {
-              const h = Math.max(d.total ? 12 : 0, (d.total / maxDay) * 100);
-              return (
-                <div
-                  key={d.date}
-                  className="flex flex-1 flex-col items-center gap-2"
-                >
-                  <p className="text-[11px] font-bold tabular-nums text-ink">
-                    {d.total || "·"}
-                  </p>
-                  <div className="flex h-24 w-full items-end justify-center">
-                    <div
-                      className="w-[52%] rounded-t bg-brand"
-                      style={{ height: `${h}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] font-medium text-ink-muted">
-                    {d.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </Link>
-      ) : null}
-
-      {!loading && recent.length > 0 ? (
-        <section className="dash-reveal space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-display text-xl font-bold text-ink">
-              Derniers colis
-            </h2>
-            <Link
-              href={`${basePath}/parcels`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-brand"
-            >
-              Voir tout
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-cream bg-surface">
-            <div className="hidden grid-cols-[1.2fr_1.4fr_1fr_auto_auto] gap-3 border-b border-cream bg-cream-soft/50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted md:grid">
-              <span>Code</span>
-              <span>Destinataire</span>
-              <span>Statut</span>
-              <span>Date</span>
-              <span className="text-right">COD</span>
-            </div>
-            <ul className="divide-y divide-cream">
-              {recent.map((p) => {
-                const meta = STATUS_META[p.status as StatusKey];
-                return (
-                  <li key={p.id}>
-                    <Link
-                      href={`${basePath}/parcels/${p.id}`}
-                      className="grid grid-cols-1 gap-2 px-4 py-3.5 transition hover:bg-brand/[0.03] md:grid-cols-[1.2fr_1.4fr_1fr_auto_auto] md:items-center md:gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-mono text-sm font-bold text-brand">
-                          {p.code ?? `#${p.id}`}
-                        </p>
-                        <p className="mt-0.5 text-xs text-ink-muted md:hidden">
-                          {p.recipientName} · {p.city}
-                        </p>
-                      </div>
-                      <div className="hidden min-w-0 md:block">
-                        <p className="truncate font-semibold text-ink">
-                          {p.recipientName}
-                        </p>
-                        <p className="truncate text-xs text-ink-muted">
-                          {p.city}
-                          {p.phone ? ` · ${p.phone}` : ""}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-cream px-2.5 py-1 text-[11px] font-bold text-ink">
-                          <span aria-hidden>{meta?.emoji ?? "📋"}</span>
-                          {meta?.label ?? p.status}
-                        </span>
-                      </div>
-                      <span className="hidden text-sm text-ink-muted md:block">
-                        {formatShortDate(p.createdAt)}
-                      </span>
-                      <span className="text-right text-sm font-extrabold tabular-nums text-ink">
-                        {formatPrice(p.price)}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </section>
+      {!loading && !error && kpis ? (
+        <MobileOpsDashboard
+          basePath={basePath}
+          firstName={firstName}
+          subtitle={
+            isSender
+              ? "Votre activité d'aujourd'hui en un coup d'œil."
+              : "Voici un aperçu de votre activité aujourd'hui."
+          }
+          kpis={primaryKpis}
+          extraKpis={extraKpis}
+          revenue={kpis.revenue}
+          inProgress={kpis.inProgress}
+          delivered={kpis.delivered}
+          deliveryRate={kpis.deliveryRate}
+          lateCount={lateCount}
+          last7Days={analytics?.last7Days ?? []}
+          recent={recent}
+          returns={returns}
+          deliveredRecent={deliveredRecent}
+          isSender={isSender}
+        />
       ) : null}
     </div>
   );

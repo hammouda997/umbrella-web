@@ -189,16 +189,16 @@ export function PaymentsManager({
         <Panel className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="font-display text-lg font-bold text-ink">Nouvelle demande</h2>
-              <p className="text-sm text-ink-muted">
+              <h2 className="font-display text-lg font-bold text-ops-ink">Nouvelle demande</h2>
+              <p className="text-sm text-ops-ink/50">
                 Colis livrés non encore inclus dans une demande
               </p>
             </div>
             {eligible.length > 0 ? (
-              <label className="inline-flex items-center gap-2 text-sm font-medium text-ink">
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-ops-ink">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 accent-brand"
+                  className="h-4 w-4 accent-ops-accent"
                   checked={allSelected}
                   onChange={() => setSelected(allSelected ? [] : eligible.map((p) => p.id))}
                 />
@@ -208,7 +208,7 @@ export function PaymentsManager({
           </div>
 
           {eligible.length === 0 ? (
-            <p className="rounded-xl bg-cream-soft/40 px-4 py-6 text-center text-sm text-ink-muted">
+            <p className="rounded-xl bg-ops-ink/[0.05] px-4 py-6 text-center text-sm text-ops-ink/50">
               {parcels.loading ? "Chargement…" : "Aucun colis livré à réclamer pour le moment."}
             </p>
           ) : (
@@ -219,24 +219,24 @@ export function PaymentsManager({
                   <li key={p.id}>
                     <label
                       className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
-                        checked ? "border-brand bg-brand/5" : "border-cream hover:border-brand/40"
+                        checked ? "border-ops-accent bg-ops-accent/10" : "border-ops-card hover:border-ops-accent/40"
                       }`}
                     >
                       <input
                         type="checkbox"
-                        className="h-4 w-4 accent-brand"
+                        className="h-4 w-4 accent-ops-accent"
                         checked={checked}
                         onChange={() => toggle(p.id)}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-mono text-xs font-semibold text-ink">
+                        <span className="block font-mono text-xs font-semibold text-ops-ink">
                           {p.code ?? `#${p.id}`}
                         </span>
-                        <span className="block truncate text-xs text-ink-muted">
+                        <span className="block truncate text-xs text-ops-ink/50">
                           {p.recipientName} · {p.city}
                         </span>
                       </span>
-                      <span className="font-semibold text-ink">{formatTnd(p.price)}</span>
+                      <span className="font-semibold text-ops-ink">{formatTnd(p.price)}</span>
                     </label>
                   </li>
                 );
@@ -244,9 +244,9 @@ export function PaymentsManager({
             </ul>
           )}
 
-          <div className="flex flex-col gap-3 border-t border-cream pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-ink-muted">
-              {selected.length} colis · <span className="font-bold text-ink">{formatTnd(selectedTotal)}</span>
+          <div className="flex flex-col gap-3 border-t border-ops-card pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-ops-ink/50">
+              {selected.length} colis · <span className="font-bold text-ops-ink">{formatTnd(selectedTotal)}</span>
             </p>
             <Button
               icon={HandCoins}
@@ -280,7 +280,7 @@ export function PaymentsManager({
         {payments.loading && paymentList.length === 0 ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-ops-ink/[0.06]" />
             ))}
           </div>
         ) : visible.length === 0 ? (
@@ -305,28 +305,28 @@ export function PaymentsManager({
                 return (
                   <tr key={p.id} className={trClass}>
                     <td className={tdClass}>
-                      <p className="font-semibold text-ink">#{p.id}</p>
-                      <p className="text-xs text-ink-muted">
+                      <p className="font-semibold text-ops-ink">#{p.id}</p>
+                      <p className="text-xs text-ops-ink/50">
                         {new Date(p.createdAt).toLocaleDateString("fr-TN")}
                         {p.note ? ` · ${p.note}` : ""}
                       </p>
                     </td>
                     {canModerate ? (
-                      <td className={`${tdClass} text-ink`}>{p.sender?.name ?? "—"}</td>
+                      <td className={`${tdClass} text-ops-ink`}>{p.sender?.name ?? "—"}</td>
                     ) : null}
                     <td className={tdClass}>
                       <div className="flex flex-wrap gap-1">
                         {p.items.map((i) => (
                           <span
                             key={`${p.id}-${i.parcel.id}`}
-                            className="rounded-md bg-cream-soft/60 px-1.5 py-0.5 font-mono text-[11px] text-ink"
+                            className="rounded-md bg-ops-ink/[0.06] px-1.5 py-0.5 font-mono text-[11px] text-ops-ink"
                           >
                             {i.parcel.code ?? `#${i.parcel.id}`}
                           </span>
                         ))}
                       </div>
                     </td>
-                    <td className={`${tdClass} whitespace-nowrap text-right font-bold text-ink`}>
+                    <td className={`${tdClass} whitespace-nowrap text-right font-bold text-ops-ink`}>
                       {formatTnd(p.amount)}
                     </td>
                     <td className={tdClass}>
@@ -382,7 +382,7 @@ export function PaymentsManager({
       </TableCard>
 
       {canCreate && eligible.length > 0 ? (
-        <p className="text-xs text-ink-muted">
+        <p className="text-xs text-ops-ink/50">
           Statuts éligibles : <StatusBadge status="LIVRES" /> <StatusBadge status="LIVRES_PAYES" />
         </p>
       ) : null}

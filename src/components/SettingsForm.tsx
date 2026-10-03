@@ -85,16 +85,16 @@ export function SettingsForm({
       <Panel className="flex flex-wrap items-center gap-4">
         <Avatar name={user.name} className="h-14 w-14 text-base" />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-xl font-bold text-ink">{user.name}</p>
-          <p className="truncate text-sm text-ink-muted">{user.email}</p>
+          <p className="truncate font-display text-xl font-bold text-ops-ink">{user.name}</p>
+          <p className="truncate text-sm text-ops-ink/50">{user.email}</p>
         </div>
         <Badge tone="brand">{ROLE_LABEL[user.role]}</Badge>
       </Panel>
 
       <Panel>
         <div className="mb-4 flex items-center gap-2">
-          <UserRound className="h-4 w-4 text-brand" aria-hidden />
-          <h2 className="font-display text-lg font-bold text-ink">Informations</h2>
+          <UserRound className="h-4 w-4 text-ops-accent" aria-hidden />
+          <h2 className="font-display text-lg font-bold text-ops-ink">Informations</h2>
         </div>
         <form onSubmit={onSaveProfile} noValidate className="grid gap-4 sm:grid-cols-2">
           <TextField
@@ -131,8 +131,8 @@ export function SettingsForm({
 
       <Panel>
         <div className="mb-4 flex items-center gap-2">
-          <KeyRound className="h-4 w-4 text-brand" aria-hidden />
-          <h2 className="font-display text-lg font-bold text-ink">Mot de passe</h2>
+          <KeyRound className="h-4 w-4 text-ops-accent" aria-hidden />
+          <h2 className="font-display text-lg font-bold text-ops-ink">Mot de passe</h2>
         </div>
         <form onSubmit={onChangePassword} noValidate className="grid gap-4 sm:grid-cols-3">
           <TextField

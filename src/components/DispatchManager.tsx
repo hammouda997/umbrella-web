@@ -158,7 +158,7 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
 
   function driverSelect(p: Parcel, className?: string) {
     if (p.mode !== "INTERNAL") {
-      return <span className="text-xs text-ink-muted">{showModes ? "EXTERNAL" : "Réseau partenaire"}</span>;
+      return <span className="text-xs text-ops-ink/50">{showModes ? "EXTERNAL" : "Réseau partenaire"}</span>;
     }
     return (
       <select
@@ -270,13 +270,13 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
               : undefined
           }
           renderItem={(p) => (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cream bg-surface px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ops-card bg-ops-surface px-4 py-3">
               <div className="min-w-0">
-                <p className="font-mono text-xs font-semibold text-brand">{p.code}</p>
-                <p className="font-semibold text-ink">{p.recipientName}</p>
+                <p className="font-mono text-xs font-semibold text-ops-accent">{p.code}</p>
+                <p className="font-semibold text-ops-ink">{p.recipientName}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <StatusBadge status={p.status} />
-                  {p.driver ? <span className="text-xs text-ink-muted">{p.driver.name}</span> : null}
+                  {p.driver ? <span className="text-xs text-ops-ink/50">{p.driver.name}</span> : null}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -309,7 +309,7 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
           {parcelsQuery.loading && parcels.length === 0 ? (
             <div className="space-y-2 p-4">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
+                <div key={i} className="h-12 animate-pulse rounded-xl bg-ops-ink/[0.06]" />
               ))}
             </div>
           ) : visible.length === 0 ? (
@@ -331,14 +331,14 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
                 {visible.map((p) => (
                   <tr key={p.id} className={trClass}>
                     <td className={tdClass}>
-                      <p className="font-mono text-xs font-semibold text-ink">{p.code}</p>
+                      <p className="font-mono text-xs font-semibold text-ops-ink">{p.code}</p>
                       {showModes ? (
-                        <p className="text-[10px] font-semibold uppercase text-ink-muted">{p.mode}</p>
+                        <p className="text-[10px] font-semibold uppercase text-ops-ink/50">{p.mode}</p>
                       ) : null}
                     </td>
                     <td className={tdClass}>
-                      <p className="font-medium text-ink">{p.recipientName}</p>
-                      <p className="text-xs text-ink-muted">
+                      <p className="font-medium text-ops-ink">{p.recipientName}</p>
+                      <p className="text-xs text-ops-ink/50">
                         {p.city}, {p.governorate}
                       </p>
                     </td>
@@ -356,7 +356,7 @@ export function DispatchManager({ staffMode = false }: { staffMode?: boolean }) 
       )}
 
       {staffMode && activeZones.length > 0 ? (
-        <p className="text-xs text-ink-muted">
+        <p className="text-xs text-ops-ink/50">
           Zones actives : {activeZones.map((z) => z.name).join(", ")}
         </p>
       ) : null}

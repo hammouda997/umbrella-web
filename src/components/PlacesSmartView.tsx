@@ -35,12 +35,12 @@ export function PlacesSmartView<T extends PlaceItem>({
     <div className="space-y-4">
       <Panel className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand/10 text-brand">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-ops-accent/15 text-ops-accent">
             <MapPinned className="h-5 w-5" />
           </span>
           <div>
-            <p className="font-display text-lg font-bold text-ink">{title}</p>
-            <p className="text-sm text-ink-muted">{description}</p>
+            <p className="font-display text-lg font-bold text-ops-ink">{title}</p>
+            <p className="text-sm text-ops-ink/50">{description}</p>
           </div>
         </div>
         <button
@@ -48,8 +48,8 @@ export function PlacesSmartView<T extends PlaceItem>({
           onClick={() => setEnabled((v) => !v)}
           className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${
             enabled
-              ? "border border-cream bg-surface text-ink"
-              : "bg-brand text-white hover:bg-brand-soft"
+              ? "border border-ops-card bg-ops-surface text-ops-ink"
+              : "bg-ops-accent text-white hover:bg-ops-accent-soft"
           }`}
         >
           {enabled ? "📋 Liste simple" : "📍 Organiser par lieux"}
@@ -60,7 +60,7 @@ export function PlacesSmartView<T extends PlaceItem>({
         <div className="space-y-5">
           {places.map((place, placeIndex) => (
             <section key={place.placeKey} className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-brand px-4 py-3 text-white">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ops-accent px-4 py-3 text-white">
                 <div className="flex items-center gap-3">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-bold">
                     {placeIndex + 1}
@@ -84,7 +84,7 @@ export function PlacesSmartView<T extends PlaceItem>({
             </section>
           ))}
           {places.length === 0 ? (
-            <p className="text-sm text-ink-muted">Aucun colis à regrouper.</p>
+            <p className="text-sm text-ops-ink/50">Aucun colis à regrouper.</p>
           ) : null}
         </div>
       ) : null}

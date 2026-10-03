@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { OpsDashboardLoader } from "@/components/OpsDashboardLoader";
 
 const AdminNavexDashboard = dynamic(
   () =>
@@ -9,13 +10,7 @@ const AdminNavexDashboard = dynamic(
     ),
   {
     ssr: false,
-    loading: () => (
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded bg-surface" />
-        ))}
-      </div>
-    ),
+    loading: () => <OpsDashboardLoader />,
   },
 );
 

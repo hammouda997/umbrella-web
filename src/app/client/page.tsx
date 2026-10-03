@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { LifeBuoy, PackageSearch } from "lucide-react";
 import {
+  DashboardHero,
+  DashboardPromo,
+} from "@/components/DashboardHero";
+import {
   EmptyState,
   ErrorBanner,
   LoadingBlock,
-  PageHeader,
   Panel,
   StatCard,
   StatusBadge,
@@ -40,31 +43,43 @@ function progress(status: string) {
 export default function ClientPage() {
   const { data, error, loading, reload } = useApiQuery<Parcel[]>("/parcels");
   const parcels = useMemo(() => data ?? [], [data]);
-  const inTransit = parcels.filter((p) => ["A_ENLEVER", "ENLEVES", "AU_DEPOT", "EN_COURS", "A_VERIFIER"].includes(p.status)).length;
-  const delivered = parcels.filter((p) => p.status === "LIVRES" || p.status === "LIVRES_PAYES").length;
+  const inTransit = parcels.filter((p) =>
+    ["A_ENLEVER", "ENLEVES", "AU_DEPOT", "EN_COURS", "A_VERIFIER"].includes(
+      p.status,
+    ),
+  ).length;
+  const delivered = parcels.filter(
+    (p) => p.status === "LIVRES" || p.status === "LIVRES_PAYES",
+  ).length;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader
-        title="Mes livraisons"
-        description="Suivez vos colis et contactez le support si besoin"
-        actions={
-          <Link href="/client/tickets" className={buttonClass("secondary")}>
-            <LifeBuoy className="h-4 w-4" aria-hidden />
-            Support
-          </Link>
-        }
+      <DashboardHero
+        subtitle="Suivez vos colis et contactez le support si besoin."
+        actions={[
+          { href: "/client/tickets", label: "Support" },
+          { href: "/track", label: "Suivre un code", primary: true },
+        ]}
       />
 
-      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
+      {error ? (
+        <ErrorBanner message={error} onRetry={() => void reload()} />
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Colis" value={parcels.length} icon={PackageSearch} tone="brand" />
+        <StatCard
+          label="Colis"
+          value={parcels.length}
+          icon={PackageSearch}
+          tone="brand"
+        />
         <StatCard label="En route" value={inTransit} tone="gold" />
         <StatCard label="Livrés" value={delivered} tone="success" />
       </div>
 
-      {loading && parcels.length === 0 ? <LoadingBlock rows={2} label="Chargement…" /> : null}
+      {loading && parcels.length === 0 ? (
+        <LoadingBlock rows={2} label="Chargement…" />
+      ) : null}
 
       {!loading && parcels.length === 0 ? (
         <EmptyState
@@ -85,9 +100,11 @@ export default function ClientPage() {
           return (
             <li key={p.id}>
               <Panel className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:text-left">
                   <div className="min-w-0">
-                    <p className="font-mono text-xs font-semibold text-brand">{p.code}</p>
+                    <p className="font-mono text-xs font-semibold text-brand">
+                      {p.code}
+                    </p>
                     <p className="mt-1 font-display text-lg font-bold text-ink">
                       {p.designation ?? p.notes ?? "Colis"}
                     </p>
@@ -99,8 +116,14 @@ export default function ClientPage() {
                 </div>
                 {pct !== null ? (
                   <div>
-                    <div className="h-2 overflow-hidden rounded-full bg-cream-soft" aria-hidden>
-                      <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
+                    <div
+                      className="h-2 overflow-hidden rounded-full bg-cream-soft"
+                      aria-hidden
+                    >
+                      <div
+                        className="h-full rounded-full bg-brand transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                     <div className="mt-1.5 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
                       <span>Créé</span>
@@ -111,9 +134,12 @@ export default function ClientPage() {
                     </div>
                   </div>
                 ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-cream pt-3">
+                <div className="flex flex-col items-center gap-2 border-t border-cream pt-3 text-center sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:text-left">
                   <p className="text-xs text-ink-muted">
-                    Mis à jour le {new Date(p.updatedAt ?? p.createdAt).toLocaleDateString("fr-TN")}
+                    Mis à jour le{" "}
+                    {new Date(p.updatedAt ?? p.createdAt).toLocaleDateString(
+                      "fr-TN",
+                    )}
                   </p>
                   <Link
                     href={`/track?code=${encodeURIComponent(p.code ?? "")}`}
@@ -127,6 +153,15 @@ export default function ClientPage() {
           );
         })}
       </ul>
+
+      <div className="flex justify-center">
+        <Link href="/client/tickets" className={buttonClass("secondary")}>
+          <LifeBuoy className="h-4 w-4" aria-hidden />
+          Ouvrir un ticket
+        </Link>
+      </div>
+
+      <DashboardPromo />
     </div>
   );
 }

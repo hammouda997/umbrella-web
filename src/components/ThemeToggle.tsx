@@ -7,12 +7,15 @@ import { cn } from "@/lib/cn";
 export function ThemeToggle({
   className,
   tone = "default",
+  iconOnly = false,
 }: {
   className?: string;
   tone?: "default" | "on-dark" | "on-light";
+  iconOnly?: boolean;
 }) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
+  const isIconDark = iconOnly || tone === "on-dark";
 
   return (
     <button
@@ -21,18 +24,27 @@ export function ThemeToggle({
       aria-label={isDark ? "Passer en thème clair" : "Passer en thème sombre"}
       title={isDark ? "Thème clair" : "Thème sombre"}
       className={cn(
-        "inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition",
-        tone === "on-dark" &&
-          "border-white/25 bg-white/10 text-white hover:bg-white/15",
+        "inline-flex items-center justify-center transition",
+        isIconDark
+          ? "h-10 w-10 rounded-xl border-0 bg-transparent text-ops-ink/70 hover:bg-ops-ink/[0.06] hover:text-ops-ink"
+          : "h-10 gap-2 rounded-lg border px-3 text-sm font-semibold",
         tone === "on-light" &&
-          "border-cream bg-surface text-ink hover:border-brand hover:text-brand",
+          !isIconDark &&
+          "border-ops-card bg-ops-surface text-ops-ink hover:border-ops-accent/50 hover:text-ops-accent",
         tone === "default" &&
-          "border-cream bg-surface text-ink hover:border-brand hover:text-brand",
+          !isIconDark &&
+          "border-ops-card bg-ops-surface text-ops-ink hover:border-ops-accent/50 hover:text-ops-accent",
         className,
       )}
     >
-      {isDark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
-      <span className="hidden sm:inline">{isDark ? "Clair" : "Sombre"}</span>
+      {isDark ? (
+        <Sun className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+      ) : (
+        <Moon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+      )}
+      {!isIconDark ? (
+        <span className="hidden sm:inline">{isDark ? "Clair" : "Sombre"}</span>
+      ) : null}
     </button>
   );
 }

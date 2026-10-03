@@ -317,7 +317,7 @@ export function LandingScrollJourney() {
     <section
       ref={root}
       id="parcours"
-      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-[#EFE8E0] py-6 sm:py-8 md:py-10"
+      className="relative flex flex-col overflow-hidden bg-[#EFE8E0] py-10 sm:py-12 md:py-14 lg:h-[100svh] lg:max-h-[100svh] lg:py-8"
       aria-label="Parcours de livraison"
     >
       <div
@@ -335,16 +335,16 @@ export function LandingScrollJourney() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#991211]/70 sm:text-[11px]">
             / En route
           </p>
-          <h2 className="mt-1.5 font-display text-2xl font-semibold tracking-[-0.03em] text-black sm:mt-2 sm:text-3xl md:text-[2rem]">
+          <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-0.03em] text-black sm:mt-2 sm:text-3xl md:text-[2rem]">
             Du dépôt à la porte
           </h2>
-          <p className="mx-auto mt-1.5 max-w-lg text-[13px] leading-snug text-black/55 sm:mt-2 sm:text-[14px] lg:mx-0">
+          <p className="mx-auto mt-1 max-w-lg text-[13px] leading-snug text-black/55 sm:mt-2 sm:text-[14px] lg:mx-0">
             Pickup, transit, livraison et COD — suivi jusqu’à chez votre client.
           </p>
         </div>
 
         {/* Mobile — compact centered step list (no overlapping path cards) */}
-        <ul className="mt-4 grid min-h-0 flex-1 grid-cols-2 content-center gap-2.5 overflow-hidden lg:hidden">
+        <ul className="mt-3 grid grid-cols-2 content-start gap-2 overflow-hidden pb-2 sm:mt-4 sm:gap-2.5 lg:hidden">
           {STEPS.map((step, i) => {
             const Icon = step.Icon;
             const tone = TONE_CLASS[step.tone];
@@ -352,14 +352,14 @@ export function LandingScrollJourney() {
             return (
               <li
                 key={step.title}
-                className={`journey-mobile-step rounded-xl p-3 text-center ${tone.card}`}
+                className={`journey-mobile-step rounded-xl px-2.5 py-2.5 text-center sm:p-3 ${tone.card}`}
               >
                 <span
-                  className={`mx-auto inline-flex h-7 w-7 items-center justify-center rounded-full ${tone.icon}`}
+                  className={`mx-auto inline-flex h-6 w-6 items-center justify-center rounded-full sm:h-7 sm:w-7 ${tone.icon}`}
                 >
                   <Icon className="h-3.5 w-3.5" aria-hidden />
                 </span>
-                <p className={`mt-1.5 font-display text-[10px] font-bold tracking-wide ${tone.num}`}>
+                <p className={`mt-1 font-display text-[10px] font-bold tracking-wide ${tone.num}`}>
                   {n}
                 </p>
                 <h3 className={`mt-0.5 font-display text-[13px] font-semibold ${tone.title}`}>

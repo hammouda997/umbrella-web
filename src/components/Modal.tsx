@@ -76,7 +76,7 @@ export function Modal({
       <button
         type="button"
         aria-label="Fermer"
-        className="absolute inset-0 bg-ink/50 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-ops-page/70 backdrop-blur-[2px]"
         onClick={() => onCloseRef.current()}
       />
 
@@ -86,27 +86,27 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "relative z-[81] flex w-full max-h-[94dvh] flex-col overflow-hidden rounded-t-2xl border border-cream bg-surface shadow-soft sm:max-h-[90vh] sm:rounded-2xl",
+          "relative z-[81] flex w-full max-h-[94dvh] flex-col overflow-hidden rounded-t-2xl border border-ops-card bg-ops-surface text-ops-ink shadow-ops sm:max-h-[90vh] sm:rounded-2xl",
           width,
         )}
       >
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-cream px-4 py-3.5 sm:px-5">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-ops-card px-4 py-3.5 sm:px-5">
           <div className="min-w-0">
             <h2
               id={titleId}
-              className="font-display text-lg font-extrabold text-ink sm:text-xl"
+              className="font-display text-lg font-extrabold text-ops-ink sm:text-xl"
             >
               {title}
             </h2>
             {description ? (
-              <p className="mt-0.5 text-sm text-ink-muted">{description}</p>
+              <p className="mt-0.5 text-sm text-ops-ink/50">{description}</p>
             ) : null}
           </div>
           <button
             type="button"
             data-modal-close
             onClick={() => onCloseRef.current()}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cream text-ink transition hover:border-brand hover:text-brand"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ops-card text-ops-ink transition hover:border-ops-accent/50 hover:text-ops-accent"
             aria-label="Fermer"
           >
             <X className="h-4 w-4" />
@@ -120,7 +120,7 @@ export function Modal({
         ) : null}
 
         {footer ? (
-          <footer className="shrink-0 border-t border-cream bg-surface px-4 py-3 sm:px-5">
+          <footer className="shrink-0 border-t border-ops-card bg-ops-surface px-4 py-3 sm:px-5">
             {footer}
           </footer>
         ) : null}

@@ -22,7 +22,7 @@ import { useApi, useApiQuery } from "@/lib/use-api";
 
 const MapPinPicker = dynamic(
   () => import("@/components/MapPinPicker").then((m) => m.MapPinPicker),
-  { ssr: false, loading: () => <div className="h-64 animate-pulse rounded-xl bg-cream-soft/60" /> },
+  { ssr: false, loading: () => <div className="h-64 animate-pulse rounded-xl bg-ops-ink/[0.06]" /> },
 );
 
 type Draft = {
@@ -146,8 +146,8 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
           <Panel key={z.id} className={z.isActive ? "" : "opacity-70"}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="truncate font-display text-lg font-bold text-ink">{z.name}</h2>
-                <p className="text-sm text-ink-muted">{z.governorate ?? "Gouvernorat non défini"}</p>
+                <h2 className="truncate font-display text-lg font-bold text-ops-ink">{z.name}</h2>
+                <p className="text-sm text-ops-ink/50">{z.governorate ?? "Gouvernorat non défini"}</p>
               </div>
               <Badge tone={z.isActive ? "success" : "neutral"} dot>
                 {z.isActive ? "Active" : "Inactive"}
@@ -155,16 +155,16 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
             </div>
             <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
               <div>
-                <dt className="text-[11px] uppercase tracking-wide text-ink-muted">Rayon</dt>
-                <dd className="font-semibold text-ink">{z.radiusKm ?? "—"} km</dd>
+                <dt className="text-[11px] uppercase tracking-wide text-ops-ink/50">Rayon</dt>
+                <dd className="font-semibold text-ops-ink">{z.radiusKm ?? "—"} km</dd>
               </div>
               <div>
-                <dt className="text-[11px] uppercase tracking-wide text-ink-muted">Colis</dt>
-                <dd className="font-semibold text-ink">{z.parcelCount ?? 0}</dd>
+                <dt className="text-[11px] uppercase tracking-wide text-ops-ink/50">Colis</dt>
+                <dd className="font-semibold text-ops-ink">{z.parcelCount ?? 0}</dd>
               </div>
               <div>
-                <dt className="text-[11px] uppercase tracking-wide text-ink-muted">Centre</dt>
-                <dd className="truncate font-mono text-xs text-ink">
+                <dt className="text-[11px] uppercase tracking-wide text-ops-ink/50">Centre</dt>
+                <dd className="truncate font-mono text-xs text-ops-ink">
                   {z.centerLat != null && z.centerLng != null
                     ? `${z.centerLat.toFixed(3)}, ${z.centerLng.toFixed(3)}`
                     : "—"}
@@ -172,7 +172,7 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
               </div>
             </dl>
             {canCreate ? (
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-cream pt-4">
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-ops-card pt-4">
                 <Button size="sm" variant="secondary" icon={Pencil} onClick={() => openEdit(z)}>
                   Modifier
                 </Button>
@@ -255,7 +255,7 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
               lng={draft.lng}
               onPick={({ lat, lng }) => setDraft((d) => (d ? { ...d, lat, lng } : d))}
             />
-            <p className="text-xs text-ink-muted">
+            <p className="text-xs text-ops-ink/50">
               Centre (optionnel) :{" "}
               {draft.lat != null && draft.lng != null
                 ? `${draft.lat.toFixed(5)}, ${draft.lng.toFixed(5)}`

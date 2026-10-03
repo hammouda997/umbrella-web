@@ -51,10 +51,12 @@ export function NotificationsMenu({
   role,
   userId,
   portalPrefix,
+  tone = "default",
 }: {
   role: AppRole;
   userId: number;
   portalPrefix: string;
+  tone?: "default" | "on-dark";
 }) {
   const router = useRouter();
   const { data, loading, reload } = useApiQuery<AppNotification[]>("/notifications");
@@ -162,14 +164,19 @@ export function NotificationsMenu({
       <button
         type="button"
         onClick={toggle}
-        className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cream text-ink-muted transition hover:border-brand hover:text-brand"
+        className={cn(
+          "relative inline-flex h-10 w-10 items-center justify-center rounded-xl border transition",
+          tone === "on-dark"
+            ? "border-0 bg-transparent text-ops-ink/70 hover:bg-ops-ink/[0.06] hover:text-ops-ink"
+            : "border-ops-card text-ops-ink/50 hover:border-ops-accent/50 hover:text-ops-accent",
+        )}
         aria-label={unread ? `Notifications, ${unread} non lues` : "Notifications"}
         aria-expanded={open}
         aria-haspopup="true"
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
         {unread > 0 ? (
-          <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold leading-[18px] text-white">
+          <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-ops-accent px-1 text-[10px] font-bold leading-[18px] text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         ) : null}
@@ -179,25 +186,59 @@ export function NotificationsMenu({
         <div
           role="dialog"
           aria-label="Notifications"
-          className="absolute right-0 z-50 mt-2 w-[min(92vw,380px)] overflow-hidden rounded-2xl border border-cream bg-surface shadow-soft"
+          className={cn(
+            "absolute right-0 z-50 mt-2 w-[min(92vw,380px)] overflow-hidden rounded-2xl border shadow-ops",
+            tone === "on-dark"
+              ? "border-ops-ink/10 bg-ops-surface"
+              : "border-ops-card bg-ops-surface",
+          )}
         >
-          <div className="flex items-center justify-between gap-3 border-b border-cream px-4 py-3">
-            <p className="font-display text-sm font-bold text-ink">Notifications</p>
+          <div
+            className={cn(
+              "flex items-center justify-between gap-3 border-b px-4 py-3",
+              tone === "on-dark" ? "border-ops-ink/10" : "border-ops-card",
+            )}
+          >
+            <p
+              className={cn(
+                "font-display text-sm font-bold",
+                tone === "on-dark" ? "text-ops-ink" : "text-ops-ink",
+              )}
+            >
+              Notifications
+            </p>
             <button
               type="button"
               onClick={markAllRead}
               disabled={unread === 0}
-              className="shrink-0 text-xs font-semibold text-brand transition hover:text-brand/80 disabled:text-ink-muted/60"
+              className={cn(
+                "shrink-0 text-xs font-semibold transition disabled:opacity-40",
+                tone === "on-dark"
+                  ? "text-ops-accent-muted hover:text-ops-accent"
+                  : "text-ops-accent hover:text-ops-accent/80 disabled:text-ops-ink/50/60",
+              )}
             >
               Tout marquer comme lu
             </button>
           </div>
           <ul className="max-h-[60vh] overflow-y-auto">
             {loading && items.length === 0 ? (
-              <li className="px-4 py-6 text-center text-sm text-ink-muted">Chargement…</li>
+              <li
+                className={cn(
+                  "px-4 py-6 text-center text-sm",
+                  tone === "on-dark" ? "text-ops-ink/45" : "text-ops-ink/50",
+                )}
+              >
+                Chargement…
+              </li>
             ) : null}
             {!loading && items.length === 0 ? (
-              <li className="px-4 py-8 text-center text-sm text-ink-muted">
+              <li
+                className={cn(
+                  "px-4 py-8 text-center text-sm",
+                  tone === "on-dark" ? "text-ops-ink/45" : "text-ops-ink/50",
+                )}
+              >
                 Aucune notification pour le moment
               </li>
             ) : null}
@@ -209,31 +250,63 @@ export function NotificationsMenu({
                 <li
                   key={item.id}
                   className={cn(
-                    "flex items-stretch border-b border-cream/60",
-                    isUnread && "bg-brand/[0.04]",
+                    "flex items-stretch border-b",
+                    tone === "on-dark" ? "border-ops-ink/[0.08]" : "border-ops-card/60",
+                    isUnread &&
+                      (tone === "on-dark" ? "bg-ops-accent/10" : "bg-ops-accent/[0.08]"),
                   )}
                 >
                   <button
                     type="button"
                     onClick={() => openItem(item)}
-                    className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left transition hover:bg-cream-soft/40"
+                    className={cn(
+                      "flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left transition",
+                      tone === "on-dark"
+                        ? "hover:bg-ops-ink/[0.04]"
+                        : "hover:bg-ops-ink/[0.05]",
+                    )}
                   >
-                    <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cream-soft text-brand">
+                    <span
+                      className={cn(
+                        "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                        tone === "on-dark"
+                          ? "bg-ops-ink/[0.08] text-ops-accent-muted"
+                          : "bg-ops-surface-2 text-ops-accent",
+                      )}
+                    >
                       <Icon className="h-4 w-4" aria-hidden />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-semibold text-ink">
+                        <span
+                          className={cn(
+                            "truncate text-sm font-semibold",
+                            tone === "on-dark" ? "text-ops-ink" : "text-ops-ink",
+                          )}
+                        >
                           {item.title}
                         </span>
                         {isUnread ? (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full bg-ops-accent"
+                            aria-hidden
+                          />
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-ink-muted">
+                      <span
+                        className={cn(
+                          "mt-0.5 block truncate text-xs",
+                          tone === "on-dark" ? "text-ops-ink/50" : "text-ops-ink/50",
+                        )}
+                      >
                         {item.body}
                       </span>
-                      <span className="mt-1 block text-[11px] text-ink-muted/80">
+                      <span
+                        className={cn(
+                          "mt-1 block text-[11px]",
+                          tone === "on-dark" ? "text-ops-ink/35" : "text-ops-ink/50/80",
+                        )}
+                      >
                         {relativeTime(item.at)}
                       </span>
                     </span>
@@ -242,7 +315,12 @@ export function NotificationsMenu({
                     <button
                       type="button"
                       onClick={() => markRead(item.id)}
-                      className="m-2 inline-flex shrink-0 items-center gap-1 self-center rounded-lg px-2 py-1.5 text-[11px] font-semibold text-brand transition hover:bg-brand/10"
+                      className={cn(
+                        "m-2 inline-flex shrink-0 items-center gap-1 self-center rounded-lg px-2 py-1.5 text-[11px] font-semibold transition",
+                        tone === "on-dark"
+                          ? "text-ops-accent-muted hover:bg-ops-accent/15"
+                          : "text-ops-accent hover:bg-ops-accent/15",
+                      )}
                       aria-label={`Marquer « ${item.title} » comme lu`}
                     >
                       <Check className="h-3.5 w-3.5" aria-hidden />

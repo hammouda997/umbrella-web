@@ -90,8 +90,8 @@ function FilterChip({
       className={cn(
         "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
         active
-          ? "border-brand bg-brand text-white"
-          : "border-cream bg-surface text-ink hover:border-brand/40",
+          ? "border-ops-accent bg-ops-accent text-white"
+          : "border-ops-card bg-ops-surface text-ops-ink hover:border-ops-accent/40",
       )}
     >
       {color ? (
@@ -105,7 +105,7 @@ function FilterChip({
       <span
         className={cn(
           "tabular-nums",
-          active ? "text-white/80" : "text-ink-muted",
+          active ? "text-white/80" : "text-ops-ink/50",
         )}
       >
         {count}

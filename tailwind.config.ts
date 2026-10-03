@@ -24,9 +24,21 @@ const config: Config = {
         surface: "var(--color-surface)",
         page: "var(--color-page)",
         panel: "var(--panel)",
+        ops: {
+          page: "var(--ops-page)",
+          surface: "var(--ops-surface)",
+          "surface-2": "var(--ops-surface-2)",
+          sidebar: "var(--ops-sidebar)",
+          accent: "var(--ops-accent)",
+          "accent-soft": "var(--ops-accent-soft)",
+          "accent-muted": "var(--ops-accent-muted)",
+          ink: "rgb(var(--ops-ink-rgb) / <alpha-value>)",
+          card: "var(--ops-card-border)",
+        },
       },
       boxShadow: {
         soft: "var(--shadow-soft)",
+        ops: "var(--ops-shadow)",
       },
       fontFamily: {
         display: ["var(--font-display)", "serif"],

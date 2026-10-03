@@ -22,7 +22,7 @@ export function ZoneField({
   onChange,
   canManage = true,
   fieldClass =
-    "w-full rounded-xl border border-cream-soft bg-surface px-3 py-2.5 text-sm outline-none ring-brand focus:ring-2",
+    "w-full rounded-xl border border-ops-card bg-ops-page px-3 py-2.5 text-sm text-ops-ink outline-none ring-ops-accent focus:ring-2",
 }: ZoneFieldProps) {
   const toast = useToast();
   const [zones, setZones] = useState<SavedZone[]>([]);
@@ -83,7 +83,7 @@ export function ZoneField({
 
   return (
     <div className="space-y-2">
-      <p className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+      <p className="inline-flex items-center gap-1.5 text-xs font-medium text-ops-ink/50">
         <MapPinned className="h-3.5 w-3.5" />
         Zones
       </p>
@@ -94,8 +94,8 @@ export function ZoneField({
           className={cn(
             "rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition",
             value == null
-              ? "border-brand bg-brand/10 text-brand"
-              : "border-cream bg-surface text-ink-muted hover:border-brand hover:text-brand",
+              ? "border-ops-accent bg-ops-accent/15 text-ops-accent"
+              : "border-ops-card bg-ops-page text-ops-ink/50 hover:border-ops-accent/50 hover:text-ops-accent",
           )}
         >
           Sans zone
@@ -112,8 +112,8 @@ export function ZoneField({
                 className={cn(
                   "rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition",
                   selected
-                    ? "border-brand bg-brand/10 text-brand"
-                    : "border-cream bg-surface text-ink hover:border-brand hover:text-brand",
+                    ? "border-ops-accent bg-ops-accent/15 text-ops-accent"
+                    : "border-ops-card bg-ops-page text-ops-ink hover:border-ops-accent/50 hover:text-ops-accent",
                 )}
               >
                 {zone.name}
@@ -128,7 +128,7 @@ export function ZoneField({
                     setEditingId(zone.id);
                     setEditName(zone.name);
                   }}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-ink-muted transition hover:bg-cream-soft hover:text-brand"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-ops-ink/50 transition hover:bg-ops-ink/[0.06] hover:text-ops-accent"
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
@@ -143,7 +143,7 @@ export function ZoneField({
               setEditingId(null);
               setCreating(true);
             }}
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-cream-soft px-3 py-1.5 text-xs font-semibold text-ink-muted transition hover:border-brand hover:text-brand"
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-ops-card px-3 py-1.5 text-xs font-semibold text-ops-ink/50 transition hover:border-ops-accent/50 hover:text-ops-accent"
           >
             <Plus className="h-3.5 w-3.5" />
             Ajouter une zone
@@ -172,7 +172,7 @@ export function ZoneField({
             <button
               type="button"
               onClick={addZone}
-              className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-3 text-sm font-semibold text-white"
+              className="inline-flex h-10 items-center gap-1 rounded-xl bg-ops-accent px-3 text-sm font-semibold text-white"
             >
               <Check className="h-4 w-4" />
               Ajouter
@@ -183,7 +183,7 @@ export function ZoneField({
                 setCreating(false);
                 setNewName("");
               }}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cream text-ink-muted"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-ops-card text-ops-ink/50"
             >
               <X className="h-4 w-4" />
             </button>
@@ -211,7 +211,7 @@ export function ZoneField({
             <button
               type="button"
               onClick={saveEdit}
-              className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-3 text-sm font-semibold text-white"
+              className="inline-flex h-10 items-center gap-1 rounded-xl bg-ops-accent px-3 text-sm font-semibold text-white"
             >
               <Check className="h-4 w-4" />
               Enregistrer
@@ -219,7 +219,7 @@ export function ZoneField({
             <button
               type="button"
               onClick={() => setEditingId(null)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cream text-ink-muted"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-ops-card text-ops-ink/50"
             >
               <X className="h-4 w-4" />
             </button>

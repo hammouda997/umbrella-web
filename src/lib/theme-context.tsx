@@ -40,10 +40,10 @@ function readStoredTheme(): ThemeMode | null {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>("light");
+  const [theme, setThemeState] = useState<ThemeMode>("dark");
 
   useEffect(() => {
-    const initial = readStoredTheme() ?? "light";
+    const initial = readStoredTheme() ?? "dark";
     setThemeState(initial);
     applyTheme(initial);
   }, []);

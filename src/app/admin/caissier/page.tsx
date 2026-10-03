@@ -132,11 +132,11 @@ export default function CaissierPage() {
       <div className="space-y-4">
         {groups.map((group) => (
           <Panel key={group.key} className="overflow-hidden p-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cream bg-cream-soft/30 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ops-card bg-ops-ink/[0.04] px-5 py-4">
               <div>
-                <p className="font-display text-lg font-bold text-ink">{group.name}</p>
-                <p className="text-sm text-ink-muted">
-                  {group.items.length} colis · <span className="font-semibold text-ink">{formatTnd(group.total)}</span>
+                <p className="font-display text-lg font-bold text-ops-ink">{group.name}</p>
+                <p className="text-sm text-ops-ink/50">
+                  {group.items.length} colis · <span className="font-semibold text-ops-ink">{formatTnd(group.total)}</span>
                 </p>
               </div>
               {filter === "OPEN" ? (
@@ -170,12 +170,12 @@ export default function CaissierPage() {
                 <tbody>
                   {group.items.map((item) => (
                     <tr key={item.id} className={trClass}>
-                      <td className={`${tdClass} font-mono text-xs font-semibold text-ink`}>{item.code}</td>
+                      <td className={`${tdClass} font-mono text-xs font-semibold text-ops-ink`}>{item.code}</td>
                       <td className={tdClass}>
-                        <p className="text-ink">{item.recipientName}</p>
-                        <p className="text-xs text-ink-muted">{item.city}</p>
+                        <p className="text-ops-ink">{item.recipientName}</p>
+                        <p className="text-xs text-ops-ink/50">{item.city}</p>
                       </td>
-                      <td className={`${tdClass} text-right font-semibold text-ink`}>{formatTnd(item.price)}</td>
+                      <td className={`${tdClass} text-right font-semibold text-ops-ink`}>{formatTnd(item.price)}</td>
                       <td className={tdClass}>
                         {item.codSettledAt ? (
                           <Badge tone="success" dot>

@@ -1,41 +1,27 @@
 "use client";
 
 import {
-  BookUser,
-  ChartColumn,
-  LayoutDashboard,
+  BarChart3,
+  CreditCard,
+  Home,
   Package,
-  PlusCircle,
-  RotateCcw,
-  Search,
   Settings,
-  Ticket,
-  Wallet,
+  Truck,
+  Users,
+  Warehouse,
 } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
-import type { PortalNavSection } from "@/components/PortalShell";
+import type { PortalNavItem } from "@/components/PortalShell";
 
-const sections: PortalNavSection[] = [
-  {
-    title: "Colis",
-    items: [
-      { href: "/expediteur", label: "Tableau de bord", icon: LayoutDashboard },
-      { href: "/expediteur/parcels", label: "Mes colis", icon: Package },
-      { href: "/expediteur/nouveau", label: "Nouveau colis", icon: PlusCircle },
-      { href: "/expediteur/recherche", label: "Rechercher", icon: Search },
-      { href: "/expediteur/retours", label: "Mes retours", icon: RotateCcw },
-      { href: "/expediteur/analytics", label: "Analytics", icon: ChartColumn },
-    ],
-  },
-  {
-    title: "Compte",
-    items: [
-      { href: "/expediteur/payments", label: "Paiements / Soldes", icon: Wallet },
-      { href: "/expediteur/tickets", label: "Tickets", icon: Ticket },
-      { href: "/expediteur/adresses", label: "Carnet d'adresses", icon: BookUser },
-      { href: "/expediteur/settings", label: "Paramètres", icon: Settings },
-    ],
-  },
+const links: PortalNavItem[] = [
+  { href: "/expediteur", label: "Accueil", icon: Home },
+  { href: "/expediteur/parcels", label: "Colis", icon: Package },
+  { href: "/expediteur/payments", label: "Paiements", icon: CreditCard },
+  { href: "/expediteur/retours", label: "Livraisons", icon: Truck },
+  { href: "/expediteur/adresses", label: "Clients", icon: Users },
+  { href: "/expediteur/analytics", label: "Rapports", icon: BarChart3 },
+  { href: "/expediteur/nouveau", label: "Entrepôt", icon: Warehouse },
+  { href: "/expediteur/settings", label: "Paramètres", icon: Settings },
 ];
 
 export default function ExpediteurLayout({
@@ -46,9 +32,9 @@ export default function ExpediteurLayout({
   return (
     <RequireRole
       roles={["EXPEDITEUR"]}
-      title="Umbrella"
-      subtitle="Expéditeur"
-      sections={sections}
+      title="Expéditeur"
+      subtitle="Tableau de bord"
+      links={links}
     >
       {children}
     </RequireRole>

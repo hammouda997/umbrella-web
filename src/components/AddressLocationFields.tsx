@@ -53,7 +53,7 @@ type AddressLocationFieldsProps = {
 };
 
 const DEFAULT_FIELD =
-  "w-full rounded-lg border border-cream-soft bg-surface px-3 py-2.5 text-sm outline-none transition focus:border-brand";
+  "w-full rounded-lg border border-ops-card bg-ops-page px-3 py-2.5 text-sm text-ops-ink outline-none transition focus:border-ops-accent";
 
 const GOVERNORATES = Object.keys(governoratesWithCities);
 
@@ -312,12 +312,12 @@ export function AddressLocationFields({
   return (
     <div className="space-y-3" ref={rootRef}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-ink-muted">{permissionHint(permission)}</p>
+        <p className="text-xs text-ops-ink/50">{permissionHint(permission)}</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setShowMap((v) => !v)}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-cream bg-surface px-3.5 py-2 text-xs font-semibold text-ink transition hover:border-brand hover:text-brand"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-ops-card bg-ops-surface px-3.5 py-2 text-xs font-semibold text-ops-ink transition hover:border-ops-accent/50 hover:text-ops-accent"
           >
             <Map className="h-3.5 w-3.5" />
             {showMap ? "Masquer carte" : "Choisir sur carte"}
@@ -326,7 +326,7 @@ export function AddressLocationFields({
             type="button"
             onClick={() => void captureMyLocation()}
             disabled={locating || permission === "unsupported"}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-cream bg-surface px-3.5 py-2 text-xs font-semibold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-ops-card bg-ops-surface px-3.5 py-2 text-xs font-semibold text-ops-ink transition hover:border-ops-accent/50 hover:text-ops-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             {locating ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -341,10 +341,10 @@ export function AddressLocationFields({
       <div
         className={`rounded-lg border px-3 py-2 text-xs ${
           quality.level === "strong"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
             : quality.level === "ok"
-              ? "border-amber-200 bg-amber-50 text-amber-950"
-              : "border-brand/30 bg-brand/5 text-ink"
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+              : "border-ops-accent/40 bg-ops-accent/10 text-ops-ink"
         }`}
       >
         <p className="font-semibold">
@@ -398,10 +398,10 @@ export function AddressLocationFields({
       ) : null}
 
       {geoMessage ? (
-        <p className="rounded-lg border border-cream-soft bg-cream-soft/40 px-3 py-2 text-xs text-ink">
+        <p className="rounded-lg border border-ops-card bg-ops-ink/[0.05] px-3 py-2 text-xs text-ops-ink">
           {geoMessage}
           {value.lat != null && value.lng != null ? (
-            <span className="mt-1 block font-mono text-[10px] text-ink-muted">
+            <span className="mt-1 block font-mono text-[10px] text-ops-ink/50">
               {value.lat.toFixed(5)}, {value.lng.toFixed(5)}
               {value.accuracyMeters != null
                 ? ` · ±${Math.round(value.accuracyMeters)} m`
@@ -414,12 +414,12 @@ export function AddressLocationFields({
       <div className="relative">
         <label
           htmlFor={searchId}
-          className="mb-1.5 block text-sm font-medium text-ink"
+          className="mb-1.5 block text-sm font-medium text-ops-ink"
         >
           Recherche d’adresse
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ops-ink/50" />
           <input
             id={searchId}
             value={searchQuery}
@@ -440,14 +440,14 @@ export function AddressLocationFields({
             aria-autocomplete="list"
           />
           {searching ? (
-            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-ink-muted" />
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-ops-ink/50" />
           ) : null}
         </div>
         {searchOpen && suggestions.length > 0 ? (
           <ul
             id={`${searchId}-list`}
             role="listbox"
-            className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-cream-soft bg-surface py-1 shadow-soft"
+            className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-ops-card bg-ops-surface py-1 shadow-ops"
           >
             {suggestions.map((hit, index) => (
               <li
@@ -459,8 +459,8 @@ export function AddressLocationFields({
                   type="button"
                   className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition ${
                     index === activeIndex
-                      ? "bg-brand/10 text-brand"
-                      : "text-ink hover:bg-cream-soft/60"
+                      ? "bg-ops-accent/15 text-ops-accent"
+                      : "text-ops-ink hover:bg-ops-ink/[0.06]"
                   }`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => applySuggestion(hit)}
@@ -468,7 +468,7 @@ export function AddressLocationFields({
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
                   <span>
                     <span className="block font-medium">{hit.label}</span>
-                    <span className="text-[11px] text-ink-muted">
+                    <span className="text-[11px] text-ops-ink/50">
                       {hit.source === "photon"
                         ? "Carte"
                         : hit.source === "cache"
@@ -488,9 +488,9 @@ export function AddressLocationFields({
         className={`grid gap-3 ${compact ? "sm:grid-cols-1" : "sm:grid-cols-2"}`}
       >
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">
+          <label className="mb-1.5 block text-sm font-medium text-ops-ink">
             Gouvernorat
-            {required ? <span className="text-brand"> *</span> : null}
+            {required ? <span className="text-ops-accent"> *</span> : null}
           </label>
           <select
             name="governorate"
@@ -561,9 +561,9 @@ export function AddressLocationFields({
         </div>
         {showStreet ? (
           <div className={compact ? undefined : "sm:col-span-2"}>
-            <label className="mb-1.5 block text-sm font-medium text-ink">
+            <label className="mb-1.5 block text-sm font-medium text-ops-ink">
               Adresse complète
-              {required ? <span className="text-brand"> *</span> : null}
+              {required ? <span className="text-ops-accent"> *</span> : null}
             </label>
             <input
               name="address"

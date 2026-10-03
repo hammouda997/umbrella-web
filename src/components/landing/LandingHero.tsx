@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowRight, Menu, Search, X } from "lucide-react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -31,6 +31,20 @@ export function LandingHero({
 }: LandingHeroProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   useGSAP(
     () => {
@@ -94,7 +108,7 @@ export function LandingHero({
       />
 
       <header className="hero-chrome relative z-40 shrink-0">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:px-6 md:h-16 md:px-10 lg:px-14">
+        <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-3 px-5 sm:h-14 sm:px-6 md:h-16 md:px-10 lg:px-14">
           <Link href="/" className="shrink-0" aria-label="Umbrella Express">
             <BrandLogo surface="dark" priority />
           </Link>
@@ -130,39 +144,79 @@ export function LandingHero({
             </button>
           </div>
         </div>
-
-        {menuOpen ? (
-          <div
-            id="mobile-nav"
-            className="border-t border-white/15 bg-[#7a0e0e] px-5 py-4 text-center sm:px-6 md:hidden"
-          >
-            <nav className="flex flex-col gap-1" aria-label="Mobile">
-              {NAV_LINKS.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="rounded-md px-3 py-3 text-sm font-medium text-white/90"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {link.label}
-                </a>
-              ))}
-              <Link
-                href="/login"
-                className="mt-2 rounded-full bg-white px-4 py-3 text-center text-sm font-medium text-[#991211]"
-                onClick={() => setMenuOpen(false)}
-              >
-                Se connecter
-              </Link>
-            </nav>
-          </div>
-        ) : null}
       </header>
 
-      <div className="relative z-20 mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 items-center gap-6 px-5 pb-6 pt-4 sm:px-6 md:px-10 lg:grid-cols-2 lg:gap-10 lg:px-14 lg:pb-8 lg:pt-4">
+      {menuOpen ? (
+        <div
+          id="mobile-nav"
+          className="fixed inset-0 z-50 flex flex-col bg-[#991211] md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation"
+        >
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.08]"
+            aria-hidden
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, #E5DBD4 1px, transparent 0)",
+              backgroundSize: "24px 24px",
+            }}
+          />
+          <div className="relative flex h-12 shrink-0 items-center justify-between px-5">
+            <Link
+              href="/"
+              className="shrink-0"
+              aria-label="Umbrella Express"
+              onClick={() => setMenuOpen(false)}
+            >
+              <BrandLogo surface="dark" />
+            </Link>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/25 text-white"
+              aria-label="Fermer le menu"
+              onClick={() => setMenuOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <nav
+            className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-6"
+            aria-label="Mobile"
+          >
+            <p className="mb-5 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#986A36]">
+              Menu
+            </p>
+            <ul className="flex w-full max-w-xs flex-col items-center">
+              {NAV_LINKS.map((link) => (
+                <li key={link.href} className="w-full border-b border-white/15 first:border-t">
+                  <a
+                    href={link.href}
+                    className="flex items-center justify-center px-3 py-3.5 text-[17px] font-medium tracking-tight text-white/95 transition active:bg-white/10"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/login"
+              className="mt-7 inline-flex h-11 w-full max-w-xs items-center justify-center rounded-full bg-[#E5DBD4] text-[14px] font-semibold text-[#991211] transition active:bg-white"
+              onClick={() => setMenuOpen(false)}
+            >
+              Se connecter
+            </Link>
+          </nav>
+        </div>
+      ) : null}
+
+      <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center gap-6 px-5 py-4 sm:gap-7 sm:px-6 sm:py-5 md:px-10 lg:grid lg:grid-cols-2 lg:items-center lg:gap-10 lg:px-14 lg:py-6">
         <div
           ref={contentRef}
-          className="hero-content flex w-full max-w-lg flex-col items-center justify-center text-center lg:mx-0 lg:items-start lg:justify-center lg:text-left"
+          className="hero-content flex w-full max-w-lg flex-col items-center text-center lg:mx-0 lg:items-start lg:text-left"
         >
           <p className="hero-eyebrow text-[11px] font-semibold uppercase tracking-[0.2em] text-[#E1D2A7] sm:text-xs">
             Last-mile · Tunisie · COD
@@ -172,7 +226,7 @@ export function LandingHero({
             Livraison rapide et sécurisée pour e-commerce en Tunisie
           </h1>
 
-          <div className="hero-3d-copy relative mt-4 h-[2.35em] w-full text-[clamp(2.15rem,7vw,3.75rem)] sm:mt-5">
+          <div className="hero-3d-copy relative mt-3 h-[2.35em] w-full text-[clamp(2.05rem,6.8vw,3.75rem)] sm:mt-4">
             {HERO_PHRASES.map((phrase, i) => (
               <p
                 key={phrase}
@@ -191,26 +245,26 @@ export function LandingHero({
             ))}
           </div>
 
-          <p className="hero-kicker mt-5 max-w-md text-[15px] leading-relaxed text-white/75 sm:mt-6 sm:text-base">
+          <p className="hero-kicker mt-3.5 max-w-md text-[14px] leading-snug text-white/75 sm:mt-5 sm:text-base sm:leading-relaxed">
             Pickup, suivi live et paiement à la livraison — sans friction pour
             votre e-commerce.
           </p>
 
-          <form onSubmit={onTrack} className="hero-track mt-5 w-full sm:mt-6">
+          <form onSubmit={onTrack} className="hero-track mt-4 w-full sm:mt-5">
             <label className="sr-only" htmlFor="track-code">
               Numéro de suivi
             </label>
-            <div className="flex min-w-0 items-center gap-2 rounded-full bg-[#E5DBD4] p-1.5">
+            <div className="flex min-w-0 items-center gap-1.5 rounded-full bg-[#E5DBD4] p-1 sm:gap-2 sm:p-1.5">
               <input
                 id="track-code"
                 value={trackingCode}
                 onChange={(e) => onTrackingCodeChange(e.target.value)}
                 placeholder="Numéro de suivi…"
-                className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-left text-[14px] text-[#1a1414] outline-none placeholder:text-[#1a1414]/40 sm:text-[15px]"
+                className="min-w-0 flex-1 bg-transparent px-3.5 py-2 text-left text-[14px] text-[#1a1414] outline-none placeholder:text-[#1a1414]/40 sm:px-4 sm:py-2.5 sm:text-[15px]"
               />
               <button
                 type="submit"
-                className="magnet inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-[#991211] px-5 text-[13px] font-semibold text-white transition hover:bg-[#7a0e0e] sm:h-11 sm:px-6"
+                className="magnet inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-[#991211] px-4 text-[13px] font-semibold text-white transition hover:bg-[#7a0e0e] sm:h-11 sm:px-6"
               >
                 <Search className="h-4 w-4" aria-hidden />
                 <span className="hidden sm:inline">Suivre</span>
@@ -218,17 +272,17 @@ export function LandingHero({
             </div>
           </form>
 
-          <div className="hero-ctas mt-6 flex w-full flex-col gap-3 sm:mt-7 sm:flex-row sm:items-center sm:justify-center lg:justify-start">
+          <div className="hero-ctas mt-3.5 flex w-full flex-col gap-2 sm:mt-6 sm:flex-row sm:items-center sm:justify-center sm:gap-3 lg:justify-start">
             <Link
               href="/signup"
-              className="magnet inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#E5DBD4] px-7 text-[14px] font-semibold text-[#991211] transition hover:bg-white"
+              className="magnet inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#E5DBD4] px-6 text-[14px] font-semibold text-[#991211] transition hover:bg-white sm:h-12 sm:px-7"
             >
               Créer un compte
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <a
               href="#parcours"
-              className="magnet inline-flex h-12 items-center justify-center rounded-full border border-white/35 px-7 text-[14px] font-medium text-white transition hover:border-white hover:bg-white/10"
+              className="magnet inline-flex h-11 items-center justify-center rounded-full border border-white/35 px-6 text-[14px] font-medium text-white transition hover:border-white hover:bg-white/10 sm:h-12 sm:px-7"
             >
               Voir le parcours
             </a>

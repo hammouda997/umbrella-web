@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import {
+  DashboardHero,
+  DashboardPromo,
+} from "@/components/DashboardHero";
 import { StatusBoard } from "@/components/StatusBoard";
 import { apiFetch, type StatusCard } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -35,32 +38,32 @@ export function DashboardHome({
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold text-ink">{title}</h1>
-          <p className="mt-1 text-sm text-ink-muted">{description}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg border border-cream bg-surface px-4 py-2">
-            <p className="text-[11px] uppercase tracking-wide text-ink-muted">Total</p>
-            <p className="font-display text-xl font-bold text-brand">{total}</p>
+      <DashboardHero
+        subtitle={description}
+        actions={[
+          {
+            href: `${basePath}/parcels`,
+            label: "Tous les colis",
+            primary: true,
+          },
+        ]}
+        footer={
+          <div className="mx-auto flex max-w-xs flex-col items-center gap-1 rounded-lg border border-ops-card bg-ops-surface px-4 py-2 text-center lg:mx-0 lg:items-start lg:text-left">
+            <p className="text-[11px] uppercase tracking-wide text-ops-ink/50">
+              {title} · Total
+            </p>
+            <p className="font-display text-xl font-bold text-ops-accent">{total}</p>
           </div>
-          <Link
-            href={`${basePath}/parcels`}
-            className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft"
-          >
-            Tous les colis
-          </Link>
-        </div>
-      </header>
+        }
+      />
 
       {loading ? (
-        <div className="rounded-2xl border border-cream bg-surface p-1.5">
+        <div className="rounded-2xl border border-ops-card bg-ops-surface p-1.5">
           <div className="grid grid-cols-3 gap-1 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9">
             {Array.from({ length: 9 }).map((_, i) => (
               <div
                 key={i}
-                className="h-16 animate-pulse rounded-xl bg-cream-soft/80 md:h-11"
+                className="h-16 animate-pulse rounded-xl bg-ops-surface-2/80 md:h-11"
               />
             ))}
           </div>
@@ -68,12 +71,16 @@ export function DashboardHome({
       ) : null}
 
       {error ? (
-        <p className="rounded-lg border border-brand/20 bg-brand/5 px-4 py-3 text-sm text-brand">
+        <p className="rounded-lg border border-ops-accent/20 bg-ops-accent/10 px-4 py-3 text-center text-sm text-ops-accent lg:text-left">
           {error}
         </p>
       ) : null}
 
-      {!loading && !error ? <StatusBoard items={items} basePath={basePath} /> : null}
+      {!loading && !error ? (
+        <StatusBoard items={items} basePath={basePath} />
+      ) : null}
+
+      <DashboardPromo />
     </div>
   );
 }

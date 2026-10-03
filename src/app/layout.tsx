@@ -27,7 +27,7 @@ const themeBootScript = `
   try {
     var k='umbrella-theme';
     var t=localStorage.getItem(k);
-    if(t!=='light'&&t!=='dark') t='light';
+    if(t!=='light'&&t!=='dark') t='dark';
     var r=document.documentElement;
     if(t==='dark') r.classList.add('dark');
     else r.classList.remove('dark');

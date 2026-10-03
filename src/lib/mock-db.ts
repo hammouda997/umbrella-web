@@ -27,7 +27,7 @@ import { STATUS_META } from "@/lib/status-meta";
  * so the UI behaves the same with NEXT_PUBLIC_USE_MOCK=true or against umbrella/api.
  */
 
-const STORAGE_KEY = "umbrella.mock-db.v1";
+const STORAGE_KEY = "umbrella.mock-db.v2";
 export const MOCK_RESET_EVENT = "umbrella:mock-db-reset";
 
 type MockDb = {

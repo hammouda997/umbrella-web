@@ -50,14 +50,14 @@ function FieldLabel({
   htmlFor?: string;
 }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-ink">
+    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-ops-ink">
       {children}
     </label>
   );
 }
 
 const fieldClass =
-  "w-full rounded-xl border border-cream-soft bg-surface px-3 py-2.5 text-sm outline-none ring-brand focus:ring-2";
+  "w-full rounded-xl border border-ops-card bg-ops-page px-3 py-2.5 text-sm text-ops-ink outline-none ring-ops-accent focus:ring-2";
 
 export function ParcelsManager({
   canCreate = false,
@@ -386,7 +386,7 @@ export function ParcelsManager({
           className="space-y-5"
         >
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ops-ink/50">
               Destinataire
             </h3>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -426,13 +426,13 @@ export function ParcelsManager({
             </div>
           </section>
 
-          <section className="space-y-3 border-t border-cream pt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+          <section className="space-y-3 border-t border-ops-card pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ops-ink/50">
               Adresse
             </h3>
             {savedAddresses.length > 0 ? (
               <div className="space-y-2">
-                <p className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                <p className="inline-flex items-center gap-1.5 text-xs font-medium text-ops-ink/50">
                   <BookUser className="h-3.5 w-3.5" />
                   Depuis le carnet
                 </p>
@@ -442,10 +442,10 @@ export function ParcelsManager({
                       key={a.id}
                       type="button"
                       onClick={() => applySavedAddress(a)}
-                      className="rounded-full border border-cream bg-surface px-3 py-1.5 text-left text-xs font-semibold text-ink transition hover:border-brand hover:text-brand"
+                      className="rounded-full border border-ops-card bg-ops-surface px-3 py-1.5 text-left text-xs font-semibold text-ops-ink transition hover:border-ops-accent/50 hover:text-ops-accent"
                     >
                       {a.label}
-                      <span className="mt-0.5 block font-normal text-ink-muted">
+                      <span className="mt-0.5 block font-normal text-ops-ink/50">
                         {a.city}
                         {a.governorate
                           ? ` · ${displayGovernorate(a.governorate)}`
@@ -479,13 +479,13 @@ export function ParcelsManager({
             ) : null}
           </section>
 
-          <section className="space-y-3 border-t border-cream pt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+          <section className="space-y-3 border-t border-ops-card pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ops-ink/50">
               Créneau &amp; repère
             </h3>
             <div>
-              <p className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-ink">
-                <Clock3 className="h-4 w-4 text-brand" />
+              <p className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-ops-ink">
+                <Clock3 className="h-4 w-4 text-ops-accent" />
                 Créneau de livraison
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -496,12 +496,12 @@ export function ParcelsManager({
                     onClick={() => setDeliveryWindow(w.id)}
                     className={`rounded-xl border px-3 py-2.5 text-left text-sm transition ${
                       deliveryWindow === w.id
-                        ? "border-brand bg-brand/10 text-brand"
-                        : "border-cream-soft text-ink hover:border-brand/40"
+                        ? "border-ops-accent bg-ops-accent/15 text-ops-accent"
+                        : "border-ops-card text-ops-ink hover:border-ops-accent/40"
                     }`}
                   >
                     <span className="font-semibold">{w.label}</span>
-                    <span className="mt-0.5 block text-xs text-ink-muted">
+                    <span className="mt-0.5 block text-xs text-ops-ink/50">
                       {w.hint}
                     </span>
                   </button>
@@ -512,12 +512,12 @@ export function ParcelsManager({
               <FieldLabel htmlFor="landmarkPhoto">
                 Photo repère (optionnel)
               </FieldLabel>
-              <label className="mt-1 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-cream-soft bg-cream-soft/20 px-4 py-5 text-center transition hover:border-brand/40">
-                <Camera className="h-5 w-5 text-brand" />
-                <span className="text-sm font-medium text-ink">
+              <label className="mt-1 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-ops-card bg-ops-ink/[0.04] px-4 py-5 text-center transition hover:border-ops-accent/40">
+                <Camera className="h-5 w-5 text-ops-accent" />
+                <span className="text-sm font-medium text-ops-ink">
                   {landmarkName ?? "Ajouter une photo du lieu (façade, pharmacie…)"}
                 </span>
-                <span className="text-[11px] text-ink-muted">
+                <span className="text-[11px] text-ops-ink/50">
                   Stockage local uniquement (démo front)
                 </span>
                 <input
@@ -551,8 +551,8 @@ export function ParcelsManager({
             </div>
           </section>
 
-          <section className="space-y-3 border-t border-cream pt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+          <section className="space-y-3 border-t border-ops-card pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ops-ink/50">
               Colis & paiement
             </h3>
             <div>
@@ -634,13 +634,13 @@ export function ParcelsManager({
             </div>
           </section>
 
-          <section className="space-y-3 border-t border-cream pt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+          <section className="space-y-3 border-t border-ops-card pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ops-ink/50">
               Options
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <fieldset>
-                <legend className="mb-2 text-sm font-medium text-ink">
+                <legend className="mb-2 text-sm font-medium text-ops-ink">
                   Essai produit / ouvrir avant paiement
                 </legend>
                 <div className="flex flex-wrap gap-4 text-sm">
@@ -670,7 +670,7 @@ export function ParcelsManager({
                 </div>
               </fieldset>
               <fieldset>
-                <legend className="mb-2 text-sm font-medium text-ink">
+                <legend className="mb-2 text-sm font-medium text-ops-ink">
                   Échange
                 </legend>
                 <div className="flex flex-wrap gap-4 text-sm">
@@ -697,23 +697,23 @@ export function ParcelsManager({
             </div>
 
             {allowTry ? (
-              <div className="rounded-xl border border-brand/25 bg-brand/[0.04] p-4">
-                <p className="text-sm font-semibold text-ink">
+              <div className="rounded-xl border border-ops-accent/25 bg-ops-accent/[0.08] p-4">
+                <p className="text-sm font-semibold text-ops-ink">
                   Responsabilité expéditeur — essai produit
                 </p>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                <p className="mt-2 text-sm leading-relaxed text-ops-ink/50">
                   En autorisant l&apos;essai / l&apos;ouverture du colis avant
                   paiement, vous acceptez que tout dommage, détérioration,
                   perte ou vol survenant pendant cette phase est à votre
                   charge. Umbrella Express et le livreur ne peuvent pas en être
                   tenus responsables.
                 </p>
-                <label className="mt-4 flex items-start gap-3 text-sm text-ink">
+                <label className="mt-4 flex items-start gap-3 text-sm text-ops-ink">
                   <input
                     type="checkbox"
                     checked={liabilityAccepted}
                     onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border-cream accent-brand"
+                    className="mt-1 h-4 w-4 rounded border-ops-card accent-ops-accent"
                     required
                   />
                   <span>

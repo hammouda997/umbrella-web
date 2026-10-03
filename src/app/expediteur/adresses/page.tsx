@@ -46,7 +46,7 @@ export default function ExpediteurAdressesPage() {
               setOpen((v) => !v);
               setLocation(EMPTY_LOCATION);
             }}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-soft"
+            className="inline-flex items-center gap-2 rounded-xl bg-ops-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-ops-accent-soft"
           >
             <Plus className="h-4 w-4" />
             Ajouter
@@ -92,11 +92,11 @@ export default function ExpediteurAdressesPage() {
               ] as const
             ).map(([name, label]) => (
               <label key={name} className="block text-sm sm:col-span-1">
-                <span className="text-ink-muted">{label}</span>
+                <span className="text-ops-ink/50">{label}</span>
                 <input
                   name={name}
                   required
-                  className="mt-1 w-full rounded-xl border border-cream-soft px-3 py-2 outline-none ring-brand focus:ring-2"
+                  className="mt-1 w-full rounded-xl border border-ops-card px-3 py-2 outline-none ring-ops-accent focus:ring-2"
                 />
               </label>
             ))}
@@ -105,13 +105,13 @@ export default function ExpediteurAdressesPage() {
                 value={location}
                 onChange={setLocation}
                 required
-                fieldClass="mt-1 w-full rounded-xl border border-cream-soft px-3 py-2 outline-none ring-brand focus:ring-2"
+                fieldClass="mt-1 w-full rounded-xl border border-ops-card px-3 py-2 outline-none ring-ops-accent focus:ring-2"
               />
             </div>
             <div className="sm:col-span-2">
               <button
                 type="submit"
-                className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-xl bg-ops-accent px-4 py-2 text-sm font-semibold text-white"
               >
                 Enregistrer
               </button>
@@ -125,17 +125,17 @@ export default function ExpediteurAdressesPage() {
           <li key={a.id}>
             <Panel className="flex justify-between gap-3">
               <div>
-                <p className="font-semibold text-ink">{a.label}</p>
-                <p className="mt-1 text-sm text-ink">{a.contact}</p>
-                <p className="text-sm text-ink-muted">{a.phone}</p>
-                <p className="mt-2 text-sm text-ink-muted">
+                <p className="font-semibold text-ops-ink">{a.label}</p>
+                <p className="mt-1 text-sm text-ops-ink">{a.contact}</p>
+                <p className="text-sm text-ops-ink/50">{a.phone}</p>
+                <p className="mt-2 text-sm text-ops-ink/50">
                   {a.line}, {a.city}
                   {a.governorate
                     ? ` · ${displayGovernorate(a.governorate)}`
                     : ""}
                 </p>
                 {a.lat != null && a.lng != null ? (
-                  <p className="mt-1 font-mono text-[10px] text-ink-muted">
+                  <p className="mt-1 font-mono text-[10px] text-ops-ink/50">
                     {a.lat.toFixed(5)}, {a.lng.toFixed(5)}
                   </p>
                 ) : null}
@@ -143,7 +143,7 @@ export default function ExpediteurAdressesPage() {
               <button
                 type="button"
                 onClick={() => setList(removeAddress(a.id))}
-                className="h-9 w-9 shrink-0 rounded-lg border border-cream text-ink-muted hover:text-brand"
+                className="h-9 w-9 shrink-0 rounded-lg border border-ops-card text-ops-ink/50 hover:text-ops-accent"
                 aria-label="Supprimer"
               >
                 <Trash2 className="mx-auto h-4 w-4" />

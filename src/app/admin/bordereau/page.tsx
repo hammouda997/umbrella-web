@@ -65,34 +65,34 @@ function BordereauInner() {
       />
 
       <Panel className="mx-auto max-w-lg print:border-0 print:shadow-none">
-        <div className="border-b border-cream pb-4 text-center">
-          <p className="font-display text-2xl font-extrabold text-brand">Umbrella Express</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-ink-muted">Bordereau de livraison</p>
+        <div className="border-b border-ops-card pb-4 text-center">
+          <p className="font-display text-2xl font-extrabold text-ops-accent">Umbrella Express</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-ops-ink/50">Bordereau de livraison</p>
         </div>
         <div className="mt-6 space-y-4 text-sm">
-          <p className="font-mono text-lg font-bold tracking-wide text-ink">{parcel.code}</p>
+          <p className="font-mono text-lg font-bold tracking-wide text-ops-ink">{parcel.code}</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[11px] uppercase text-ink-muted">Destinataire</p>
-              <p className="font-semibold text-ink">{parcel.recipientName}</p>
-              <p className="text-ink">{parcel.phone}</p>
+              <p className="text-[11px] uppercase text-ops-ink/50">Destinataire</p>
+              <p className="font-semibold text-ops-ink">{parcel.recipientName}</p>
+              <p className="text-ops-ink">{parcel.phone}</p>
             </div>
             <div>
-              <p className="text-[11px] uppercase text-ink-muted">COD</p>
-              <p className="font-display text-xl font-bold text-brand">{formatTnd(parcel.price)}</p>
+              <p className="text-[11px] uppercase text-ops-ink/50">COD</p>
+              <p className="font-display text-xl font-bold text-ops-accent">{formatTnd(parcel.price)}</p>
             </div>
           </div>
           <div>
-            <p className="text-[11px] uppercase text-ink-muted">Adresse</p>
-            <p className="font-medium text-ink">
+            <p className="text-[11px] uppercase text-ops-ink/50">Adresse</p>
+            <p className="font-medium text-ops-ink">
               {parcel.address}
               <br />
               {parcel.city}, {parcel.governorate}
             </p>
           </div>
           <div>
-            <p className="text-[11px] uppercase text-ink-muted">Contenu</p>
-            <p className="text-ink">{parcel.designation ?? parcel.notes ?? "—"}</p>
+            <p className="text-[11px] uppercase text-ops-ink/50">Contenu</p>
+            <p className="text-ops-ink">{parcel.designation ?? parcel.notes ?? "—"}</p>
           </div>
           <div className="mt-8 flex justify-center">
             <div
@@ -101,7 +101,7 @@ function BordereauInner() {
               role="img"
             />
           </div>
-          <p className="text-center font-mono text-[11px] text-ink-muted">{parcel.code}</p>
+          <p className="text-center font-mono text-[11px] text-ops-ink/50">{parcel.code}</p>
         </div>
       </Panel>
     </div>

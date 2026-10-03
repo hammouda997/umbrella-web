@@ -9,14 +9,14 @@ export function LandingFaq() {
   return (
     <section
       id="faq"
-      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-white px-5 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10"
+      className="relative flex flex-col overflow-hidden bg-white px-5 py-10 sm:px-6 sm:py-12 md:px-10 md:py-14 lg:h-[100svh] lg:max-h-[100svh] lg:py-8"
     >
-      <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col lg:grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-12 xl:gap-16">
-        <header className="mx-auto w-full max-w-md shrink-0 text-center lg:mx-0 lg:flex lg:max-w-none lg:flex-col lg:justify-center lg:text-left">
+      <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col justify-center gap-6 lg:grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center lg:gap-12 xl:gap-16">
+        <header className="mx-auto w-full max-w-md shrink-0 text-center lg:mx-0 lg:max-w-none lg:text-left">
           <p className="reveal text-[10px] font-semibold uppercase tracking-[0.24em] text-[#986A36] sm:text-[11px]">
             / FAQ
           </p>
-          <h2 className="reveal mt-1.5 font-display text-[clamp(1.55rem,3.6vw,2.35rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-black sm:mt-2">
+          <h2 className="reveal mt-1.5 font-display text-[clamp(1.55rem,3.6vw,2.35rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-black">
             Questions
             <span className="mt-0.5 block text-[#991211]">fréquentes</span>
           </h2>
@@ -25,7 +25,7 @@ export function LandingFaq() {
           </p>
         </header>
 
-        <ul className="faq-list mt-4 flex min-h-0 flex-1 flex-col justify-between border-t border-black/[0.08] lg:mt-0">
+        <ul className="faq-list flex flex-col border-t border-black/[0.08] lg:min-h-0">
           {FAQ_ITEMS.map((item, i) => {
             const isOpen = open === i;
             return (
@@ -35,7 +35,7 @@ export function LandingFaq() {
               >
                 <button
                   type="button"
-                  className="flex w-full items-start justify-between gap-4 py-2.5 text-left sm:py-3"
+                  className="flex w-full items-start justify-between gap-3 py-3 text-left sm:gap-4 sm:py-3.5 md:py-4"
                   aria-expanded={isOpen}
                   onClick={() => setOpen(isOpen ? null : i)}
                 >
@@ -57,7 +57,7 @@ export function LandingFaq() {
                   }`}
                 >
                   <div className="overflow-hidden">
-                    <p className="pb-2.5 text-[12px] leading-relaxed text-black/50 sm:pb-3 sm:text-[13px]">
+                    <p className="pb-2 text-[12px] leading-snug text-black/50 sm:pb-2.5 sm:text-[13px] sm:leading-relaxed">
                       {item.a}
                     </p>
                   </div>

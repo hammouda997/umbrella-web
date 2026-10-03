@@ -13,7 +13,7 @@ function MarqueeSequence({ duplicate = false }: { duplicate?: boolean }) {
           key={`${duplicate ? "b" : "a"}-${stat}`}
           className="inline-flex shrink-0 items-center"
         >
-          <span className="whitespace-nowrap px-5 text-[10px] font-semibold uppercase leading-none tracking-[0.16em] text-white sm:px-6 sm:text-[11px] sm:tracking-[0.18em]">
+          <span className="whitespace-nowrap px-3.5 text-[10px] font-semibold uppercase leading-none tracking-[0.14em] text-white sm:px-6 sm:text-[11px] sm:tracking-[0.18em]">
             {stat}
           </span>
           <span

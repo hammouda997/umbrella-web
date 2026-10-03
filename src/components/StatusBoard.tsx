@@ -58,7 +58,7 @@ export function StatusBoard({
     <nav
       ref={root}
       aria-label="Statuts colis"
-      className="rounded-2xl border border-cream bg-surface p-1.5"
+      className="rounded-2xl border border-ops-card bg-ops-surface p-1.5"
     >
       {/* Mobile: 3×3 grille. Desktop: wider strip. Never horizontal scroll. */}
       <ul
@@ -81,7 +81,7 @@ export function StatusBoard({
                 className={cn(
                   "status-card flex h-full min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-center transition",
                   "md:min-h-0 md:flex-row md:items-center md:justify-start md:gap-2 md:px-2.5 md:py-2 md:text-left",
-                  "hover:bg-brand/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+                  "hover:bg-ops-accent/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
                   empty && "opacity-50",
                 )}
               >
@@ -93,10 +93,10 @@ export function StatusBoard({
                   {emoji}
                 </span>
                 <span className="min-w-0 w-full md:w-auto">
-                  <span className="block font-display text-base font-extrabold leading-none tabular-nums text-brand md:text-lg">
+                  <span className="block font-display text-base font-extrabold leading-none tabular-nums text-ops-accent md:text-lg">
                     {item.count}
                   </span>
-                  <span className="mt-0.5 block truncate text-[10px] font-semibold leading-tight text-ink md:text-[11px]">
+                  <span className="mt-0.5 block truncate text-[10px] font-semibold leading-tight text-ops-ink md:text-[11px]">
                     {label}
                   </span>
                 </span>

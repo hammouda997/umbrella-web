@@ -9,9 +9,12 @@ import {
   Button,
   EmptyState,
   LoadingBlock,
-  PageHeader,
   Panel,
 } from "@/components/ui";
+import {
+  DashboardHero,
+  DashboardPromo,
+} from "@/components/DashboardHero";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -356,25 +359,25 @@ export function LivreurTour() {
     const busy = busyId === p.id;
 
     return (
-      <article className="rounded-2xl border border-cream bg-surface p-4 shadow-soft">
+      <article className="rounded-2xl border border-ops-card bg-ops-surface p-4 shadow-ops">
         <div className="flex items-start justify-between gap-3">
           <div>
             {stopIndex != null ? (
-              <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ops-accent">
                 Stop {stopIndex}
               </p>
             ) : null}
-            <p className="font-mono text-xs font-semibold text-brand">
+            <p className="font-mono text-xs font-semibold text-ops-accent">
               {p.code}
             </p>
-            <h2 className="mt-0.5 font-display text-lg font-bold text-ink">
+            <h2 className="mt-0.5 font-display text-lg font-bold text-ops-ink">
               {p.recipientName}
             </h2>
-            <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-muted">
+            <p className="mt-1 inline-flex items-center gap-1 text-xs text-ops-ink/50">
               <MapPin className="h-3.5 w-3.5" />
               {p.city} · {p.governorate}
               {distanceKm != null ? (
-                <span className="ml-1 font-semibold text-brand">
+                <span className="ml-1 font-semibold text-ops-accent">
                   ·{" "}
                   {distanceKm < 1
                     ? `${Math.round(distanceKm * 1000)} m`
@@ -396,17 +399,17 @@ export function LivreurTour() {
           </span>
         </div>
 
-        <p className="mt-3 text-sm text-ink-muted">{p.address}</p>
-        <p className="mt-1 text-sm font-semibold text-ink">
+        <p className="mt-3 text-sm text-ops-ink/50">{p.address}</p>
+        <p className="mt-1 text-sm font-semibold text-ops-ink">
           {formatDisplayPhone(p.phone)}
         </p>
-        <p className="mt-0.5 font-semibold text-ink">{p.price} TND COD</p>
+        <p className="mt-0.5 font-semibold text-ops-ink">{p.price} TND COD</p>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           <a
             href={telHref(p.phone)}
             onClick={() => onNativeCall(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream bg-surface px-3 py-3 text-sm font-bold text-ink"
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card bg-ops-surface px-3 py-3 text-sm font-bold text-ops-ink"
           >
             <Phone className="h-4 w-4" />
             Appel tél.
@@ -414,7 +417,7 @@ export function LivreurTour() {
           <button
             type="button"
             onClick={() => onInAppCall(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream bg-surface px-3 py-3 text-sm font-bold text-ink"
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card bg-ops-surface px-3 py-3 text-sm font-bold text-ops-ink"
           >
             <span aria-hidden>💻</span>
             Appel site
@@ -422,7 +425,7 @@ export function LivreurTour() {
           <a
             href={smsHref(p.phone)}
             onClick={() => onSms(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream bg-surface px-3 py-3 text-sm font-bold text-ink"
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card bg-ops-surface px-3 py-3 text-sm font-bold text-ops-ink"
           >
             <span aria-hidden>💬</span>
             Msg
@@ -432,7 +435,7 @@ export function LivreurTour() {
             target="_blank"
             rel="noreferrer"
             onClick={() => onWhatsApp(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 px-3 py-3 text-sm font-bold text-ink"
+            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 px-3 py-3 text-sm font-bold text-ops-ink"
           >
             <span aria-hidden>🟢</span>
             WhatsApp
@@ -445,7 +448,7 @@ export function LivreurTour() {
             })}
             target="_blank"
             rel="noreferrer"
-            className="col-span-2 inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-cream py-3 text-sm font-bold text-ink"
+            className="col-span-2 inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card py-3 text-sm font-bold text-ops-ink"
           >
             <span aria-hidden>🗺️</span>
             GPS
@@ -472,36 +475,40 @@ export function LivreurTour() {
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-10">
-      <PageHeader
-        title="Ma tournée"
-        description="Demandez une tournée intelligente groupée par lieux"
-        actions={
-          <button
-            type="button"
-            onClick={() => {
-              setLoading(true);
-              load()
-                .catch((e: Error) => setMessage(e.message))
-                .finally(() => setLoading(false));
-            }}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-cream px-3 py-2 text-sm font-semibold text-ink"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Rafraîchir
-          </button>
-        }
+      <DashboardHero
+        subtitle="Prêt pour une nouvelle journée ?"
+        actions={[
+          { href: "/livreur/parcels", label: "Mes colis" },
+          { href: "/livreur/settings", label: "Profil" },
+        ]}
       />
 
+      <div className="flex justify-center lg:justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            load()
+              .catch((e: Error) => setMessage(e.message))
+              .finally(() => setLoading(false));
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-ops-card px-3 py-2 text-sm font-semibold text-ops-ink"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Rafraîchir la tournée
+        </button>
+      </div>
+
       <Panel className="space-y-3">
-        <div className="flex items-start gap-3">
-          <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand/10 text-xl">
+        <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:text-left">
+          <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-ops-accent/15 text-xl">
             🛵
           </span>
           <div className="min-w-0 flex-1">
-            <p className="font-display text-lg font-bold text-ink">
+            <p className="font-display text-lg font-bold text-ops-ink">
               Tournée intelligente
             </p>
-            <p className="text-sm text-ink-muted">
+            <p className="text-sm text-ops-ink/50">
               Regroupe vos colis par ville / gouvernorat et propose un ordre de
               passage.
             </p>
@@ -512,7 +519,7 @@ export function LivreurTour() {
             type="button"
             disabled={locating}
             onClick={() => void captureMyPosition()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-cream px-4 py-3 text-sm font-semibold text-ink disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-ops-card px-4 py-3 text-sm font-semibold text-ops-ink disabled:opacity-50"
           >
             <Crosshair className="h-4 w-4" />
             {locating
@@ -525,7 +532,7 @@ export function LivreurTour() {
             type="button"
             disabled={generating || active.length === 0}
             onClick={demandTour}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-soft disabled:opacity-50"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-ops-accent px-4 py-3 text-sm font-semibold text-white hover:bg-ops-accent-soft disabled:opacity-50"
           >
             <Route className="h-4 w-4" />
             {generating ? "Organisation…" : "Demander une tournée"}
@@ -534,7 +541,7 @@ export function LivreurTour() {
             <button
               type="button"
               onClick={clearTour}
-              className="rounded-xl border border-cream px-4 py-3 text-sm font-semibold text-ink"
+              className="rounded-xl border border-ops-card px-4 py-3 text-sm font-semibold text-ops-ink"
             >
               Liste simple
             </button>
@@ -545,7 +552,7 @@ export function LivreurTour() {
             href={mapsUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cream bg-cream-soft/50 px-4 py-2.5 text-sm font-semibold text-ink"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-ops-card bg-ops-ink/[0.05] px-4 py-2.5 text-sm font-semibold text-ops-ink"
           >
             <span aria-hidden>🗺️</span>
             Ouvrir l&apos;itinéraire GPS ({orderedStops.length} stops)
@@ -560,8 +567,8 @@ export function LivreurTour() {
           ["Livrés", done.length],
         ].map(([label, n]) => (
           <Panel key={String(label)} className="py-3 text-center">
-            <p className="font-display text-xl font-bold text-ink">{n}</p>
-            <p className="text-[11px] uppercase tracking-wide text-ink-muted">
+            <p className="font-display text-xl font-bold text-ops-ink">{n}</p>
+            <p className="text-[11px] uppercase tracking-wide text-ops-ink/50">
               {label}
             </p>
           </Panel>
@@ -569,7 +576,7 @@ export function LivreurTour() {
       </div>
 
       {message ? (
-        <p className="rounded-xl border border-cream bg-surface px-4 py-2 text-sm font-medium text-ink">
+        <p className="rounded-xl border border-ops-card bg-ops-surface px-4 py-2 text-sm font-medium text-ops-ink">
           {message}
         </p>
       ) : null}
@@ -583,7 +590,7 @@ export function LivreurTour() {
           action={
             <Link
               href="/livreur/parcels"
-              className="text-sm font-semibold text-brand"
+              className="text-sm font-semibold text-ops-accent"
             >
               Voir tous les colis
             </Link>
@@ -599,7 +606,7 @@ export function LivreurTour() {
               .reduce((sum, pl) => sum + pl.stops.length, 0);
             return (
               <section key={place.placeKey} className="space-y-3">
-                <div className="flex items-center gap-3 rounded-xl bg-brand px-4 py-3 text-white">
+                <div className="flex items-center gap-3 rounded-xl bg-ops-accent px-4 py-3 text-white">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-bold">
                     {placeIndex + 1}
                   </span>
@@ -635,6 +642,8 @@ export function LivreurTour() {
           )}
         </ul>
       ) : null}
+
+      <DashboardPromo />
 
       <Modal
         open={Boolean(pending)}
@@ -673,25 +682,25 @@ export function LivreurTour() {
         {pending ? (
           <form id="livreur-action-form" onSubmit={onConfirmComment} className="space-y-3">
             {pending.action.needsDatetime ? (
-              <label className="block text-sm font-medium text-ink">
+              <label className="block text-sm font-medium text-ops-ink">
                 Reporter au
                 <input
                   type="datetime-local"
                   value={reportAt}
                   onChange={(e) => setReportAt(e.target.value)}
                   required
-                  className="mt-1.5 w-full rounded-xl border border-cream px-3 py-3 text-base outline-none ring-brand focus:ring-2"
+                  className="mt-1.5 w-full rounded-xl border border-ops-card px-3 py-3 text-base outline-none ring-ops-accent focus:ring-2"
                 />
               </label>
             ) : (
-              <label className="block text-sm font-medium text-ink">
+              <label className="block text-sm font-medium text-ops-ink">
                 {pending.action.commentLabel ?? "Commentaire"}
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   rows={3}
                   required
-                  className="mt-1.5 w-full rounded-xl border border-cream px-3 py-2.5 text-sm outline-none ring-brand focus:ring-2"
+                  className="mt-1.5 w-full rounded-xl border border-ops-card px-3 py-2.5 text-sm outline-none ring-ops-accent focus:ring-2"
                   placeholder="Détail…"
                 />
               </label>
@@ -729,10 +738,10 @@ export function LivreurTour() {
       >
         {inAppCall ? (
           <div className="text-center">
-            <p className="font-display text-2xl font-bold text-ink">
+            <p className="font-display text-2xl font-bold text-ops-ink">
               {inAppCall.recipientName}
             </p>
-            <p className="mt-2 font-mono text-lg font-semibold text-brand">
+            <p className="mt-2 font-mono text-lg font-semibold text-ops-accent">
               {formatDisplayPhone(inAppCall.phone)}
             </p>
           </div>
@@ -741,7 +750,7 @@ export function LivreurTour() {
 
       <Link
         href="/livreur/parcels"
-        className="block text-center text-sm font-semibold text-brand"
+        className="block text-center text-sm font-semibold text-ops-accent"
       >
         Liste complète (table) →
       </Link>

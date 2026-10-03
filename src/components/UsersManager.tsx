@@ -169,7 +169,7 @@ export function UsersManager({ allowSuperAdmin = false }: { allowSuperAdmin?: bo
         {loading && users.length === 0 ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-ops-ink/[0.06]" />
             ))}
           </div>
         ) : visible.length === 0 ? (
@@ -196,15 +196,15 @@ export function UsersManager({ allowSuperAdmin = false }: { allowSuperAdmin?: bo
                       <div className="flex items-center gap-3">
                         <Avatar name={u.name} />
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-ink">
+                          <p className="truncate font-semibold text-ops-ink">
                             {u.name}
-                            {isSelf ? <span className="ml-1.5 text-xs font-normal text-ink-muted">(vous)</span> : null}
+                            {isSelf ? <span className="ml-1.5 text-xs font-normal text-ops-ink/50">(vous)</span> : null}
                           </p>
-                          <p className="truncate text-xs text-ink-muted">{u.email}</p>
+                          <p className="truncate text-xs text-ops-ink/50">{u.email}</p>
                         </div>
                       </div>
                     </td>
-                    <td className={`${tdClass} hidden text-ink-muted md:table-cell`}>{u.phone || "—"}</td>
+                    <td className={`${tdClass} hidden text-ops-ink/50 md:table-cell`}>{u.phone || "—"}</td>
                     <td className={tdClass}>
                       <Badge tone={ROLE_TONE[u.role]}>{ROLE_LABEL[u.role]}</Badge>
                     </td>

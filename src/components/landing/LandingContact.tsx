@@ -36,7 +36,7 @@ export function LandingContact() {
   return (
     <section
       id="contact"
-      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-[#EFE8E0] px-5 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10"
+      className="relative flex flex-col overflow-hidden bg-[#EFE8E0] px-5 py-10 sm:px-6 sm:py-12 md:px-10 md:py-14 lg:h-[100svh] lg:max-h-[100svh] lg:py-8"
     >
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.28]"

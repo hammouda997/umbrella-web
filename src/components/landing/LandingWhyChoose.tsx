@@ -9,35 +9,35 @@ export function LandingWhyChoose() {
   return (
     <section
       id="choisir"
-      className="why-visual relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-white px-5 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10"
+      className="why-visual relative flex flex-col overflow-hidden bg-white px-5 py-10 sm:px-6 sm:py-12 md:px-10 md:py-14 lg:h-[100svh] lg:max-h-[100svh] lg:py-8"
     >
-      <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col">
+      <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col justify-center lg:justify-stretch">
         <header className="why-copy mx-auto w-full max-w-2xl shrink-0 text-center lg:mx-0 lg:text-left">
           <p className="reveal text-[10px] font-semibold uppercase tracking-[0.24em] text-[#986A36] sm:text-[11px]">
             Confiance
           </p>
-          <h2 className="reveal mt-1.5 font-display text-[clamp(1.55rem,3.6vw,2.35rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-black sm:mt-2">
+          <h2 className="reveal mt-1.5 font-display text-[clamp(1.55rem,3.6vw,2.35rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-black">
             Pourquoi les boutiques{" "}
             <span className="text-[#991211]">choisissent Umbrella</span>
           </h2>
         </header>
 
-        <div className="mt-4 grid min-h-0 flex-1 items-stretch gap-5 sm:mt-5 lg:mt-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-10 xl:gap-12">
-          <figure className="why-media relative hidden min-h-0 md:block">
-            <div className="relative h-full min-h-[220px] overflow-hidden rounded-[1.25rem] bg-[#1a1414]">
+        <div className="mt-5 grid min-h-0 gap-5 sm:mt-6 sm:gap-6 lg:mt-7 lg:flex-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch lg:gap-10 xl:gap-12">
+          <figure className="why-media relative mx-auto w-full max-w-lg min-h-0 lg:mx-0 lg:max-w-none">
+            <div className="relative aspect-[16/10] overflow-hidden rounded-[1.25rem] bg-[#1a1414] lg:aspect-auto lg:h-full lg:min-h-[240px]">
               <Image
                 src="/assets/livreur.png"
                 alt="Livreur Umbrella Express en opération"
                 fill
                 className="object-cover object-[center_18%]"
-                sizes="(max-width: 1024px) 45vw, 440px"
+                sizes="(max-width: 1024px) 90vw, 440px"
                 priority={false}
               />
               <div
                 className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent"
                 aria-hidden
               />
-              <figcaption className="absolute inset-x-0 bottom-0 z-10 p-4 lg:p-5">
+              <figcaption className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-4 lg:p-5">
                 <p className="font-display text-[12px] font-medium tracking-wide text-white/95 lg:text-[13px]">
                   Ops terrain · suivi tablet · remise soignée
                 </p>
@@ -51,11 +51,11 @@ export function LandingWhyChoose() {
               seul rythme — pensé pour l’e-commerce tunisien.
             </p>
 
-            <ol className="why-list mt-3 min-h-0 flex-1 overflow-hidden border-t border-black/[0.08] text-left sm:mt-4">
+            <ol className="why-list mt-4 flex flex-col overflow-hidden border-t border-black/[0.08] text-left sm:mt-5 lg:min-h-0 lg:flex-1 lg:justify-between">
               {WHY_POINTS.map((point) => (
                 <li
                   key={point.n}
-                  className="why-point group grid grid-cols-[2.5rem_1fr] gap-3 border-b border-black/[0.08] py-2.5 sm:grid-cols-[3rem_1fr] sm:gap-4 sm:py-3 md:py-3.5"
+                  className="why-point group grid grid-cols-[2.25rem_1fr] gap-2.5 border-b border-black/[0.08] py-3 sm:grid-cols-[3rem_1fr] sm:gap-4 sm:py-3.5 md:py-4"
                 >
                   <span className="pt-0.5 font-display text-[11px] font-bold tracking-[0.12em] text-[#986A36] sm:text-[12px]">
                     {point.n}

@@ -190,7 +190,7 @@ export function TicketsManager({
         {loading && tickets.length === 0 ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-xl bg-cream-soft/60" />
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-ops-ink/[0.06]" />
             ))}
           </div>
         ) : visible.length === 0 ? (
@@ -225,18 +225,18 @@ export function TicketsManager({
                       onClick={() => setSelected(t)}
                       className="text-left"
                     >
-                      <p className="font-semibold text-ink hover:text-brand">
+                      <p className="font-semibold text-ops-ink hover:text-ops-accent">
                         #{t.id} · {t.title}
                       </p>
                       {t.description ? (
-                        <p className="max-w-md truncate text-xs text-ink-muted">{t.description}</p>
+                        <p className="max-w-md truncate text-xs text-ops-ink/50">{t.description}</p>
                       ) : null}
                       {t.createdBy ? (
-                        <p className="text-[11px] text-ink-muted">par {t.createdBy.name}</p>
+                        <p className="text-[11px] text-ops-ink/50">par {t.createdBy.name}</p>
                       ) : null}
                     </button>
                   </td>
-                  <td className={`${tdClass} font-mono text-xs text-ink-muted`}>
+                  <td className={`${tdClass} font-mono text-xs text-ops-ink/50`}>
                     {t.parcel?.code ?? "—"}
                   </td>
                   <td className={tdClass}>
@@ -244,7 +244,7 @@ export function TicketsManager({
                       {STATUS_LABEL[t.status]}
                     </Badge>
                   </td>
-                  <td className={`${tdClass} hidden whitespace-nowrap text-ink-muted md:table-cell`}>
+                  <td className={`${tdClass} hidden whitespace-nowrap text-ops-ink/50 md:table-cell`}>
                     {new Date(t.createdAt).toLocaleDateString("fr-TN")}
                   </td>
                   <td className={tdClass}>{actions(t)}</td>
@@ -309,25 +309,25 @@ export function TicketsManager({
               {selected.parcel?.code ? <Badge tone="info">{selected.parcel.code}</Badge> : null}
             </div>
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-ops-ink/50">
                 Description
               </dt>
-              <dd className="mt-1 whitespace-pre-line text-ink">
+              <dd className="mt-1 whitespace-pre-line text-ops-ink">
                 {selected.description ?? "Aucune description"}
               </dd>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ops-ink/50">
                   Auteur
                 </dt>
-                <dd className="mt-1 text-ink">{selected.createdBy?.name ?? "—"}</dd>
+                <dd className="mt-1 text-ops-ink">{selected.createdBy?.name ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                <dt className="text-[11px] font-semibold uppercase tracking-wide text-ops-ink/50">
                   Ouvert le
                 </dt>
-                <dd className="mt-1 text-ink">
+                <dd className="mt-1 text-ops-ink">
                   {new Date(selected.createdAt).toLocaleString("fr-TN")}
                 </dd>
               </div>

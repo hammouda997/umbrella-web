@@ -89,8 +89,8 @@ export default function FlottePage() {
                 <div className="flex items-center gap-3">
                   <Avatar name={driver.name} className="h-11 w-11" />
                   <div>
-                    <p className="font-display text-lg font-bold text-ink">{driver.name}</p>
-                    <p className="text-sm text-ink-muted">{driver.email}</p>
+                    <p className="font-display text-lg font-bold text-ops-ink">{driver.name}</p>
+                    <p className="text-sm text-ops-ink/50">{driver.email}</p>
                   </div>
                 </div>
                 {driver.phone ? (
@@ -107,14 +107,14 @@ export default function FlottePage() {
 
               <div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-ink">
+                  <span className="font-semibold text-ops-ink">
                     {active.length} en cours · {delivered} livré(s)
                   </span>
-                  <span className="text-ink-muted">Charge {load}%</span>
+                  <span className="text-ops-ink/50">Charge {load}%</span>
                 </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-cream-soft" aria-hidden>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ops-surface-2" aria-hidden>
                   <div
-                    className={`h-full rounded-full ${load > 80 ? "bg-brand" : "bg-gold"}`}
+                    className={`h-full rounded-full ${load > 80 ? "bg-ops-accent" : "bg-gold"}`}
                     style={{ width: `${load}%` }}
                   />
                 </div>
@@ -122,10 +122,10 @@ export default function FlottePage() {
 
               <ul className="space-y-2 text-sm">
                 {assigned.slice(0, 5).map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-2 border-t border-cream/70 pt-2">
+                  <li key={p.id} className="flex items-center justify-between gap-2 border-t border-ops-card/70 pt-2">
                     <span className="min-w-0">
-                      <span className="block font-mono text-xs font-semibold text-ink">{p.code}</span>
-                      <span className="block truncate text-xs text-ink-muted">
+                      <span className="block font-mono text-xs font-semibold text-ops-ink">{p.code}</span>
+                      <span className="block truncate text-xs text-ops-ink/50">
                         {p.recipientName} · {p.city}
                       </span>
                     </span>
@@ -133,10 +133,10 @@ export default function FlottePage() {
                   </li>
                 ))}
                 {assigned.length === 0 ? (
-                  <li className="text-ink-muted">Aucun colis assigné</li>
+                  <li className="text-ops-ink/50">Aucun colis assigné</li>
                 ) : null}
                 {assigned.length > 5 ? (
-                  <li className="text-xs text-ink-muted">+ {assigned.length - 5} autre(s)</li>
+                  <li className="text-xs text-ops-ink/50">+ {assigned.length - 5} autre(s)</li>
                 ) : null}
               </ul>
             </Panel>
