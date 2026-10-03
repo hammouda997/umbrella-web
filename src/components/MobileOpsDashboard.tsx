@@ -87,17 +87,6 @@ function formatTime(value: string) {
   });
 }
 
-function formatRelative(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  const mins = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
-  if (mins < 60) return `Il y a ${Math.max(1, mins)} min`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `Il y a ${hours} h`;
-  const days = Math.round(hours / 24);
-  return `Il y a ${days} j`;
-}
-
 function formatGreetingDate(d: Date) {
   return d.toLocaleDateString("fr-TN", {
     weekday: "long",
