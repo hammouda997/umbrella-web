@@ -15,6 +15,7 @@ export type AuthSession = {
     email: string;
     role: AppRole;
     phone?: string | null;
+    agencyId?: number | null;
   };
 };
 

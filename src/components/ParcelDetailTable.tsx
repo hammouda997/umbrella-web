@@ -59,6 +59,7 @@ export function ParcelDetailTable({
   detailBasePath,
   reportTitle = "Liste des colis",
   loading = false,
+  showPartyDetails = false,
 }: {
   rows: Parcel[];
   onEdit?: (row: Parcel) => void;
@@ -66,6 +67,7 @@ export function ParcelDetailTable({
   detailBasePath?: string;
   reportTitle?: string;
   loading?: boolean;
+  showPartyDetails?: boolean;
 }) {
   const { session } = useAuth();
   const toast = useToast();
@@ -325,6 +327,15 @@ export function ParcelDetailTable({
                       <p className="truncate text-xs text-ops-ink/45">
                         {row.city}, {row.governorate} · {row.phone}
                       </p>
+                      {showPartyDetails ? (
+                        <p className="mt-1 text-[11px] text-ops-ink/55">
+                          Exp. {row.sender?.name ?? "—"}
+                          {row.sender?.phone ? ` · ${row.sender.phone}` : ""}
+                          {" · "}
+                          Liv. {row.driver?.name ?? "—"}
+                          {row.driver?.phone ? ` · ${row.driver.phone}` : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <StatusBadge status={row.status} />
                   </div>
@@ -356,6 +367,12 @@ export function ParcelDetailTable({
                   sortDir={sortDir}
                   onSort={toggleSort}
                 />
+                {showPartyDetails ? (
+                  <>
+                    <th className={thClass}>Expéditeur</th>
+                    <th className={thClass}>Livreur</th>
+                  </>
+                ) : null}
                 <SortableTh
                   label="Statut"
                   column="status"
@@ -393,7 +410,7 @@ export function ParcelDetailTable({
                     {showZone ? (
                       <tr className="bg-ops-page/70">
                         <td
-                          colSpan={7}
+                          colSpan={showPartyDetails ? 9 : 7}
                           className="border-b border-ops-card px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-ops-ink"
                         >
                           {zoneLabel(row)}
@@ -419,6 +436,26 @@ export function ParcelDetailTable({
                           {row.address}, {row.city} · {row.governorate}
                         </p>
                       </td>
+                      {showPartyDetails ? (
+                        <>
+                          <td className={tdClass}>
+                            <p className="font-medium text-ops-ink">
+                              {row.sender?.name ?? "—"}
+                            </p>
+                            <p className="text-xs text-ops-ink/45">
+                              {row.sender?.phone ?? row.sender?.email ?? ""}
+                            </p>
+                          </td>
+                          <td className={tdClass}>
+                            <p className="font-medium text-ops-ink">
+                              {row.driver?.name ?? "—"}
+                            </p>
+                            <p className="text-xs text-ops-ink/45">
+                              {row.driver?.phone ?? ""}
+                            </p>
+                          </td>
+                        </>
+                      ) : null}
                       <td className={tdClass}>
                         <StatusBadge status={row.status} />
                       </td>

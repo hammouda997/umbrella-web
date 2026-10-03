@@ -2,46 +2,26 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Crosshair, MapPin, Phone, RefreshCw, Route } from "lucide-react";
-import { useToast } from "@/components/Feedback";
-import { Modal } from "@/components/Modal";
-import {
-  Button,
-  EmptyState,
-  LoadingBlock,
-  Panel,
-} from "@/components/ui";
-import {
-  DashboardHero,
-  DashboardPromo,
-} from "@/components/DashboardHero";
+import { MapPin, RefreshCw, Route } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import {
-  estimateParcelCoords,
-  sortByDistanceFrom,
-} from "@/lib/geo-distance";
-import {
-  getCurrentPositionPrecise,
-  mapsNavigateUrl,
-  queryGeoPermission,
-} from "@/lib/geolocation";
-import { pushLocalActivity } from "@/lib/local-activity";
+import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 import {
   ACTION_TONE_CLASS,
-  formatDisplayPhone,
   livreurActionsFor,
-  smsHref,
-  telHref,
-  whatsappHref,
   type LivreurAction,
 } from "@/lib/livreur-actions";
-import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 import {
   buildTourByPlaces,
   flattenTourStops,
   googleMapsTourUrl,
 } from "@/lib/tour-planner";
+import {
+  EmptyState,
+  LoadingBlock,
+  PageHeader,
+  Panel,
+} from "@/components/ui";
 
 type TourParcel = {
   id: number;
@@ -55,60 +35,21 @@ type TourParcel = {
   mode: "EXTERNAL" | "INTERNAL";
   price: string | number;
   notes?: string | null;
-  lat?: number | null;
-  lng?: number | null;
 };
-
-function defaultDatetimeLocal(): string {
-  const d = new Date();
-  d.setHours(d.getHours() + 2, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function formatReportComment(datetimeLocal: string): string {
-  const [datePart, timePart = "00:00"] = datetimeLocal.split("T");
-  const time = timePart.slice(0, 5);
-  return `Reporté au ${datePart} ${time}`;
-}
 
 export function LivreurTour() {
   const { session } = useAuth();
-  const toast = useToast();
   const [parcels, setParcels] = useState<TourParcel[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [tourActive, setTourActive] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [myPosition, setMyPosition] = useState<{
-    lat: number;
-    lng: number;
-    accuracyMeters: number;
-  } | null>(null);
   const [pending, setPending] = useState<{
     parcel: TourParcel;
     action: LivreurAction;
   } | null>(null);
   const [comment, setComment] = useState("");
-  const [reportAt, setReportAt] = useState(defaultDatetimeLocal);
-  const [inAppCall, setInAppCall] = useState<TourParcel | null>(null);
-
-  const userId = session?.user.id ?? 0;
-
-  function notifyAction(title: string, body: string, targetId?: number) {
-    toast.info(title, body);
-    if (userId) {
-      pushLocalActivity({
-        userId,
-        title,
-        body,
-        kind: "parcel",
-        targetId: targetId ?? null,
-      });
-    }
-  }
 
   async function load() {
     if (!session?.accessToken) return;
@@ -124,7 +65,7 @@ export function LivreurTour() {
       .finally(() => setLoading(false));
   }, [session]);
 
-  const activeRaw = useMemo(
+  const active = useMemo(
     () =>
       parcels.filter(
         (p) =>
@@ -137,82 +78,35 @@ export function LivreurTour() {
       ),
     [parcels],
   );
-
-  const nearMe = useMemo(() => {
-    if (!myPosition) return null;
-    return sortByDistanceFrom(activeRaw, myPosition, (p) =>
-      estimateParcelCoords({
-        lat: p.lat,
-        lng: p.lng,
-        city: p.city,
-        governorate: p.governorate,
-      }),
-    );
-  }, [activeRaw, myPosition]);
-
-  const active = useMemo((): TourParcel[] => {
-    if (!nearMe) return activeRaw;
-    return nearMe.map((item) => {
-      const { distanceKm, ...parcel } = item;
-      void distanceKm;
-      return parcel;
-    });
-  }, [activeRaw, nearMe]);
-
   const done = useMemo(
     () => parcels.filter((p) => ["LIVRES", "LIVRES_PAYES"].includes(p.status)),
     [parcels],
   );
 
   const places = useMemo(
-    () => (tourActive ? buildTourByPlaces(active, myPosition) : []),
-    [tourActive, active, myPosition],
+    () => (tourActive ? buildTourByPlaces(active) : []),
+    [tourActive, active],
   );
 
   const orderedStops = useMemo(() => flattenTourStops(places), [places]);
 
   const mapsUrl = useMemo(
-    () => googleMapsTourUrl(orderedStops, myPosition),
-    [orderedStops, myPosition],
+    () => googleMapsTourUrl(orderedStops),
+    [orderedStops],
   );
-
-  async function captureMyPosition() {
-    setLocating(true);
-    const permission = await queryGeoPermission();
-    if (permission === "unsupported") {
-      setMessage(
-        "Localisation indisponible. Utilisez HTTPS / localhost et activez le GPS.",
-      );
-      setLocating(false);
-      return;
-    }
-    const result = await getCurrentPositionPrecise();
-    if (!result.ok) {
-      setMessage(result.message);
-      setLocating(false);
-      return;
-    }
-    setMyPosition(result.coords);
-    setMessage(
-      `Position capturée (±${Math.round(result.coords.accuracyMeters)} m) — colis triés du plus proche.`,
-    );
-    setLocating(false);
-  }
 
   function demandTour() {
     if (active.length === 0) {
-      setMessage("Aucun colis actif à organiser");
+      setMessage("Aucun colis actif ├á organiser");
       return;
     }
     setGenerating(true);
     setMessage(null);
     window.setTimeout(() => {
       setTourActive(true);
-      const planned = buildTourByPlaces(active, myPosition);
+      const planned = buildTourByPlaces(active);
       setMessage(
-        myPosition
-          ? `🗺️ Tournée prête depuis votre GPS · ${planned.length} lieu(x) · ${active.length} stop(s)`
-          : `🗺️ Tournée prête · ${planned.length} lieu(x) · ${active.length} stop(s). Activez « Ma position » pour plus de précision.`,
+        `­ƒù║´©Å Tourn├®e pr├¬te ┬À ${planned.length} lieu(x) ┬À ${active.length} stop(s)`,
       );
       setGenerating(false);
     }, 450);
@@ -220,20 +114,19 @@ export function LivreurTour() {
 
   function clearTour() {
     setTourActive(false);
-    setMessage("Tournée réinitialisée — liste simple");
+    setMessage("Tourn├®e r├®initialis├®e ÔÇö liste simple");
   }
 
   async function applyStatus(
-    parcel: TourParcel,
+    parcelId: number,
     status: string,
-    note: string | undefined,
-    actionLabel: string,
+    note?: string,
   ) {
     if (!session?.accessToken) return;
-    setBusyId(parcel.id);
+    setBusyId(parcelId);
     setMessage(null);
     try {
-      await apiFetch(`/parcels/${parcel.id}/status`, {
+      await apiFetch(`/parcels/${parcelId}/status`, {
         method: "PATCH",
         token: session.accessToken,
         body: JSON.stringify({
@@ -242,116 +135,39 @@ export function LivreurTour() {
           actor: "LIVREUR",
         }),
       });
-      const body = note
-        ? `${parcel.code ?? parcel.id} · ${note}`
-        : `${parcel.code ?? parcel.id} · ${STATUS_META[status as StatusKey]?.label ?? status}`;
-      toast.success(actionLabel, body);
-      if (userId) {
-        pushLocalActivity({
-          userId,
-          title: actionLabel,
-          body,
-          kind: "parcel",
-          targetId: parcel.id,
-        });
-      }
-      setMessage("Statut mis à jour");
+      setMessage("Statut mis ├á jour");
       setPending(null);
       setComment("");
-      setReportAt(defaultDatetimeLocal());
       await load();
     } catch (e) {
-      const err = e instanceof Error ? e.message : "Erreur";
-      toast.error("Échec", err);
-      setMessage(err);
+      setMessage(e instanceof Error ? e.message : "Erreur");
     } finally {
       setBusyId(null);
     }
   }
 
   function onAction(parcel: TourParcel, action: LivreurAction) {
-    if (action.needsDatetime || action.needsComment) {
+    if (action.needsComment) {
       setPending({ parcel, action });
-      setComment(
-        action.id === "bad-phone"
-          ? "Téléphone incorrect"
-          : action.id === "bad-address"
-            ? "Adresse incorrecte"
-            : action.id === "blocked"
-              ? "Livreur bloqué"
-              : "",
-      );
-      setReportAt(defaultDatetimeLocal());
+      setComment("");
       return;
     }
-    void applyStatus(parcel, action.status, undefined, action.label);
+    void applyStatus(parcel.id, action.status);
   }
 
   function onConfirmComment(e: FormEvent) {
     e.preventDefault();
     if (!pending) return;
-    if (pending.action.needsDatetime) {
-      if (!reportAt) {
-        setMessage("Choisissez une date et une heure");
-        return;
-      }
-      void applyStatus(
-        pending.parcel,
-        pending.action.status,
-        formatReportComment(reportAt),
-        pending.action.label,
-      );
-      return;
-    }
     if (!comment.trim()) {
       setMessage("Un commentaire est requis pour cette action");
       return;
     }
-    void applyStatus(
-      pending.parcel,
-      pending.action.status,
-      comment.trim(),
-      pending.action.label,
-    );
-  }
-
-  function onNativeCall(parcel: TourParcel) {
-    notifyAction(
-      "Appel (téléphone)",
-      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
-      parcel.id,
-    );
-  }
-
-  function onInAppCall(parcel: TourParcel) {
-    setInAppCall(parcel);
-    notifyAction(
-      "Appel (site)",
-      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
-      parcel.id,
-    );
-  }
-
-  function onSms(parcel: TourParcel) {
-    notifyAction(
-      "SMS",
-      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
-      parcel.id,
-    );
-  }
-
-  function onWhatsApp(parcel: TourParcel) {
-    notifyAction(
-      "WhatsApp",
-      `${parcel.code ?? parcel.id} · ${formatDisplayPhone(parcel.phone)}`,
-      parcel.id,
-    );
+    void applyStatus(pending.parcel.id, pending.action.status, comment.trim());
   }
 
   function renderParcelCard(
     p: TourParcel,
     stopIndex?: number,
-    distanceKm?: number | null,
   ) {
     const statusLabel =
       STATUS_META[p.status as StatusKey]?.label ?? p.status;
@@ -359,31 +175,23 @@ export function LivreurTour() {
     const busy = busyId === p.id;
 
     return (
-      <article className="rounded-2xl border border-ops-card bg-ops-surface p-4 shadow-ops">
+      <article className="rounded-2xl border border-cream bg-surface p-4 shadow-soft">
         <div className="flex items-start justify-between gap-3">
           <div>
             {stopIndex != null ? (
-              <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ops-accent">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">
                 Stop {stopIndex}
               </p>
             ) : null}
-            <p className="font-mono text-xs font-semibold text-ops-accent">
+            <p className="font-mono text-xs font-semibold text-brand">
               {p.code}
             </p>
-            <h2 className="mt-0.5 font-display text-lg font-bold text-ops-ink">
+            <h2 className="mt-0.5 font-display text-lg font-bold text-ink">
               {p.recipientName}
             </h2>
-            <p className="mt-1 inline-flex items-center gap-1 text-xs text-ops-ink/50">
+            <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-muted">
               <MapPin className="h-3.5 w-3.5" />
-              {p.city} · {p.governorate}
-              {distanceKm != null ? (
-                <span className="ml-1 font-semibold text-ops-accent">
-                  ·{" "}
-                  {distanceKm < 1
-                    ? `${Math.round(distanceKm * 1000)} m`
-                    : `${distanceKm.toFixed(1)} km`}
-                </span>
-              ) : null}
+              {p.city} ┬À {p.governorate}
             </p>
           </div>
           <span
@@ -399,58 +207,26 @@ export function LivreurTour() {
           </span>
         </div>
 
-        <p className="mt-3 text-sm text-ops-ink/50">{p.address}</p>
-        <p className="mt-1 text-sm font-semibold text-ops-ink">
-          {formatDisplayPhone(p.phone)}
-        </p>
-        <p className="mt-0.5 font-semibold text-ops-ink">{p.price} TND COD</p>
+        <p className="mt-3 text-sm text-ink-muted">{p.address}</p>
+        <p className="mt-1 font-semibold text-ink">{p.price} TND COD</p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-3 flex gap-2">
           <a
-            href={telHref(p.phone)}
-            onClick={() => onNativeCall(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card bg-ops-surface px-3 py-3 text-sm font-bold text-ops-ink"
+            href={`tel:${p.phone}`}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
           >
-            <Phone className="h-4 w-4" />
-            Appel tél.
-          </a>
-          <button
-            type="button"
-            onClick={() => onInAppCall(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card bg-ops-surface px-3 py-3 text-sm font-bold text-ops-ink"
-          >
-            <span aria-hidden>💻</span>
-            Appel site
-          </button>
-          <a
-            href={smsHref(p.phone)}
-            onClick={() => onSms(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card bg-ops-surface px-3 py-3 text-sm font-bold text-ops-ink"
-          >
-            <span aria-hidden>💬</span>
-            Msg
+            <span aria-hidden>­ƒô×</span>
+            Appeler
           </a>
           <a
-            href={whatsappHref(p.phone)}
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+              `${p.address} ${p.city} Tunisie`,
+            )}`}
             target="_blank"
             rel="noreferrer"
-            onClick={() => onWhatsApp(p)}
-            className="inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 px-3 py-3 text-sm font-bold text-ops-ink"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
           >
-            <span aria-hidden>🟢</span>
-            WhatsApp
-          </a>
-          <a
-            href={mapsNavigateUrl({
-              destLabel: `${p.address}, ${p.city}, ${p.governorate.replace(/_/g, " ")}, Tunisie`,
-              originLat: myPosition?.lat,
-              originLng: myPosition?.lng,
-            })}
-            target="_blank"
-            rel="noreferrer"
-            className="col-span-2 inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-ops-card py-3 text-sm font-bold text-ops-ink"
-          >
-            <span aria-hidden>🗺️</span>
+            <span aria-hidden>­ƒù║´©Å</span>
             GPS
           </a>
         </div>
@@ -462,7 +238,7 @@ export function LivreurTour() {
               type="button"
               disabled={busy}
               onClick={() => onAction(p, action)}
-              className={`inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 ${ACTION_TONE_CLASS[action.tone]}`}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold disabled:opacity-50 ${ACTION_TONE_CLASS[action.tone]}`}
             >
               <span aria-hidden>{action.emoji}</span>
               {action.label}
@@ -475,40 +251,36 @@ export function LivreurTour() {
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-10">
-      <DashboardHero
-        subtitle="Prêt pour une nouvelle journée ?"
-        actions={[
-          { href: "/livreur/parcels", label: "Mes colis" },
-          { href: "/livreur/settings", label: "Profil" },
-        ]}
+      <PageHeader
+        title="Ma tourn├®e"
+        description="Demandez une tourn├®e intelligente group├®e par lieux"
+        actions={
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              load()
+                .catch((e: Error) => setMessage(e.message))
+                .finally(() => setLoading(false));
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-cream px-3 py-2 text-sm font-semibold text-ink"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Rafra├«chir
+          </button>
+        }
       />
 
-      <div className="flex justify-center lg:justify-end">
-        <button
-          type="button"
-          onClick={() => {
-            setLoading(true);
-            load()
-              .catch((e: Error) => setMessage(e.message))
-              .finally(() => setLoading(false));
-          }}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-ops-card px-3 py-2 text-sm font-semibold text-ops-ink"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Rafraîchir la tournée
-        </button>
-      </div>
-
       <Panel className="space-y-3">
-        <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:text-left">
-          <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-ops-accent/15 text-xl">
-            🛵
+        <div className="flex items-start gap-3">
+          <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand/10 text-xl">
+            ­ƒøÁ
           </span>
           <div className="min-w-0 flex-1">
-            <p className="font-display text-lg font-bold text-ops-ink">
-              Tournée intelligente
+            <p className="font-display text-lg font-bold text-ink">
+              Tourn├®e intelligente
             </p>
-            <p className="text-sm text-ops-ink/50">
+            <p className="text-sm text-ink-muted">
               Regroupe vos colis par ville / gouvernorat et propose un ordre de
               passage.
             </p>
@@ -517,31 +289,18 @@ export function LivreurTour() {
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            disabled={locating}
-            onClick={() => void captureMyPosition()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-ops-card px-4 py-3 text-sm font-semibold text-ops-ink disabled:opacity-50"
-          >
-            <Crosshair className="h-4 w-4" />
-            {locating
-              ? "GPS…"
-              : myPosition
-                ? `Position ±${Math.round(myPosition.accuracyMeters)} m`
-                : "Ma position"}
-          </button>
-          <button
-            type="button"
             disabled={generating || active.length === 0}
             onClick={demandTour}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-ops-accent px-4 py-3 text-sm font-semibold text-white hover:bg-ops-accent-soft disabled:opacity-50"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-soft disabled:opacity-50"
           >
             <Route className="h-4 w-4" />
-            {generating ? "Organisation…" : "Demander une tournée"}
+            {generating ? "OrganisationÔÇª" : "Demander une tourn├®e"}
           </button>
           {tourActive ? (
             <button
               type="button"
               onClick={clearTour}
-              className="rounded-xl border border-ops-card px-4 py-3 text-sm font-semibold text-ops-ink"
+              className="rounded-xl border border-cream px-4 py-3 text-sm font-semibold text-ink"
             >
               Liste simple
             </button>
@@ -552,10 +311,10 @@ export function LivreurTour() {
             href={mapsUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-ops-card bg-ops-ink/[0.05] px-4 py-2.5 text-sm font-semibold text-ops-ink"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cream bg-cream-soft/50 px-4 py-2.5 text-sm font-semibold text-ink"
           >
-            <span aria-hidden>🗺️</span>
-            Ouvrir l&apos;itinéraire GPS ({orderedStops.length} stops)
+            <span aria-hidden>­ƒù║´©Å</span>
+            Ouvrir l&apos;itin├®raire GPS ({orderedStops.length} stops)
           </a>
         ) : null}
       </Panel>
@@ -563,12 +322,12 @@ export function LivreurTour() {
       <div className="grid grid-cols-3 gap-2">
         {[
           ["Actifs", active.length],
-          ["Lieux", tourActive ? places.length : "—"],
-          ["Livrés", done.length],
+          ["Lieux", tourActive ? places.length : "ÔÇö"],
+          ["Livr├®s", done.length],
         ].map(([label, n]) => (
           <Panel key={String(label)} className="py-3 text-center">
-            <p className="font-display text-xl font-bold text-ops-ink">{n}</p>
-            <p className="text-[11px] uppercase tracking-wide text-ops-ink/50">
+            <p className="font-display text-xl font-bold text-ink">{n}</p>
+            <p className="text-[11px] uppercase tracking-wide text-ink-muted">
               {label}
             </p>
           </Panel>
@@ -576,21 +335,21 @@ export function LivreurTour() {
       </div>
 
       {message ? (
-        <p className="rounded-xl border border-ops-card bg-ops-surface px-4 py-2 text-sm font-medium text-ops-ink">
+        <p className="rounded-xl border border-cream bg-surface px-4 py-2 text-sm font-medium text-ink">
           {message}
         </p>
       ) : null}
 
-      {loading ? <LoadingBlock rows={3} label="Chargement tournée…" /> : null}
+      {loading ? <LoadingBlock rows={3} label="Chargement tourn├®eÔÇª" /> : null}
 
       {!loading && active.length === 0 ? (
         <EmptyState
-          title="Aucune tournée active"
-          description="Les colis livrés ou clôturés apparaissent dans la liste complète."
+          title="Aucune tourn├®e active"
+          description="Les colis livr├®s ou cl├┤tur├®s apparaissent dans la liste compl├¿te."
           action={
             <Link
               href="/livreur/parcels"
-              className="text-sm font-semibold text-ops-accent"
+              className="text-sm font-semibold text-brand"
             >
               Voir tous les colis
             </Link>
@@ -603,15 +362,15 @@ export function LivreurTour() {
           {places.map((place, placeIndex) => {
             const baseIndex = places
               .slice(0, placeIndex)
-              .reduce((sum, pl) => sum + pl.stops.length, 0);
+              .reduce((sum, p) => sum + p.stops.length, 0);
             return (
               <section key={place.placeKey} className="space-y-3">
-                <div className="flex items-center gap-3 rounded-xl bg-ops-accent px-4 py-3 text-white">
+                <div className="flex items-center gap-3 rounded-xl bg-brand px-4 py-3 text-white">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-bold">
                     {placeIndex + 1}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">📍 {place.placeLabel}</p>
+                    <p className="font-semibold">­ƒôì {place.placeLabel}</p>
                     <p className="text-xs text-white/80">
                       {place.stops.length} stop
                       {place.stops.length > 1 ? "s" : ""}
@@ -619,9 +378,9 @@ export function LivreurTour() {
                   </div>
                 </div>
                 <ul className="space-y-3">
-                  {place.stops.map((parcel, i) => (
-                    <li key={parcel.id}>
-                      {renderParcelCard(parcel, baseIndex + i + 1)}
+                  {place.stops.map((p, i) => (
+                    <li key={p.id}>
+                      {renderParcelCard(p, baseIndex + i + 1)}
                     </li>
                   ))}
                 </ul>
@@ -633,126 +392,66 @@ export function LivreurTour() {
 
       {!loading && !tourActive && active.length > 0 ? (
         <ul className="space-y-4">
-          {(nearMe ?? activeRaw.map((p) => ({ ...p, distanceKm: null }))).map(
-            (p) => (
-              <li key={p.id}>
-                {renderParcelCard(p, undefined, p.distanceKm)}
-              </li>
-            ),
-          )}
+          {active.map((p) => (
+            <li key={p.id}>{renderParcelCard(p)}</li>
+          ))}
         </ul>
       ) : null}
 
-      <DashboardPromo />
-
-      <Modal
-        open={Boolean(pending)}
-        onClose={() => {
-          setPending(null);
-          setComment("");
-        }}
-        title={pending?.action.label ?? "Action"}
-        description={
-          pending
-            ? `${pending.parcel.code ?? pending.parcel.id} · ${pending.parcel.recipientName}`
-            : undefined
-        }
-        size="md"
-        footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setPending(null);
-                setComment("");
-              }}
-            >
-              Annuler
-            </Button>
-            <Button
-              type="submit"
-              form="livreur-action-form"
-              loading={Boolean(pending && busyId === pending.parcel.id)}
-            >
-              Confirmer
-            </Button>
-          </div>
-        }
-      >
-        {pending ? (
-          <form id="livreur-action-form" onSubmit={onConfirmComment} className="space-y-3">
-            {pending.action.needsDatetime ? (
-              <label className="block text-sm font-medium text-ops-ink">
-                Reporter au
-                <input
-                  type="datetime-local"
-                  value={reportAt}
-                  onChange={(e) => setReportAt(e.target.value)}
-                  required
-                  className="mt-1.5 w-full rounded-xl border border-ops-card px-3 py-3 text-base outline-none ring-ops-accent focus:ring-2"
-                />
-              </label>
-            ) : (
-              <label className="block text-sm font-medium text-ops-ink">
-                {pending.action.commentLabel ?? "Commentaire"}
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={3}
-                  required
-                  className="mt-1.5 w-full rounded-xl border border-ops-card px-3 py-2.5 text-sm outline-none ring-ops-accent focus:ring-2"
-                  placeholder="Détail…"
-                />
-              </label>
-            )}
-          </form>
-        ) : null}
-      </Modal>
-
-      <Modal
-        open={Boolean(inAppCall)}
-        onClose={() => setInAppCall(null)}
-        title="Appel en cours"
-        description={
-          inAppCall
-            ? `${inAppCall.code ?? inAppCall.id} · simulation (pas de VoIP)`
-            : undefined
-        }
-        size="md"
-        footer={
-          <Button
-            className="w-full"
-            onClick={() => {
-              if (!inAppCall) return;
-              notifyAction(
-                "Appel terminé",
-                `${inAppCall.code ?? inAppCall.id} · raccroché`,
-                inAppCall.id,
-              );
-              setInAppCall(null);
-            }}
+      {pending ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center">
+          <form
+            onSubmit={onConfirmComment}
+            className="w-full max-w-md rounded-2xl border border-cream bg-surface p-5 shadow-soft"
           >
-            Raccrocher
-          </Button>
-        }
-      >
-        {inAppCall ? (
-          <div className="text-center">
-            <p className="font-display text-2xl font-bold text-ops-ink">
-              {inAppCall.recipientName}
+            <p className="font-display text-lg font-bold text-ink">
+              <span aria-hidden className="mr-1.5">
+                {pending.action.emoji}
+              </span>
+              {pending.action.label}
             </p>
-            <p className="mt-2 font-mono text-lg font-semibold text-ops-accent">
-              {formatDisplayPhone(inAppCall.phone)}
+            <p className="mt-1 text-sm text-ink-muted">
+              {pending.parcel.code} ┬À {pending.parcel.recipientName}
             </p>
-          </div>
-        ) : null}
-      </Modal>
+            <label className="mt-4 block text-sm font-medium text-ink">
+              {pending.action.commentLabel ?? "Commentaire"}
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={3}
+                required
+                className="mt-1.5 w-full rounded-xl border border-cream px-3 py-2.5 text-sm outline-none ring-brand focus:ring-2"
+                placeholder="Ex. report demain 10h, num├®ro erron├®ÔÇª"
+              />
+            </label>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPending(null);
+                  setComment("");
+                }}
+                className="flex-1 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={busyId === pending.parcel.id}
+                className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Confirmer
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       <Link
         href="/livreur/parcels"
-        className="block text-center text-sm font-semibold text-ops-accent"
+        className="block text-center text-sm font-semibold text-brand"
       >
-        Liste complète (table) →
+        Liste compl├¿te (table) ÔåÆ
       </Link>
     </div>
   );

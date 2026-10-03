@@ -68,6 +68,7 @@ export function ParcelsManager({
   defaultOpenCreate = false,
   returnsOnly = false,
   detailBasePath,
+  showPartyDetails = false,
 }: {
   canCreate?: boolean;
   canEdit?: boolean;
@@ -77,6 +78,8 @@ export function ParcelsManager({
   defaultOpenCreate?: boolean;
   returnsOnly?: boolean;
   detailBasePath?: string;
+  /** Show expéditeur + livreur columns (support retours). */
+  showPartyDetails?: boolean;
 }) {
   const { session } = useAuth();
   const role = session?.user.role;
@@ -358,6 +361,7 @@ export function ParcelsManager({
         loading={loading && parcels.length === 0}
         detailBasePath={detailBasePath}
         reportTitle={heading}
+        showPartyDetails={showPartyDetails}
         canEditRow={canEdit ? canEditRow : undefined}
         onEdit={
           canEdit

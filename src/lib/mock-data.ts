@@ -1,5 +1,5 @@
 import type { AppRole } from "@/lib/roles";
-import type { Parcel, Payment, Ticket, Zone } from "@/lib/domain";
+import type { Agency, Parcel, Payment, Ticket, Zone } from "@/lib/domain";
 
 /** Seed dataset for demo mode. Kept identical to umbrella/api/prisma/seed.ts. */
 
@@ -11,6 +11,7 @@ export type MockUser = {
   phone: string;
   password: string;
   isActive: boolean;
+  agencyId?: number | null;
   createdAt?: string;
 };
 
@@ -75,6 +76,67 @@ export const MOCK_USERS: MockUser[] = [
     role: "LIVREUR",
     phone: "22000001",
     password: "Livreur@12345",
+    isActive: true,
+  },
+  {
+    id: 7,
+    name: "Chef Agence Tunis",
+    email: "chef@umbrella.tn",
+    role: "CHEF_AGENCE",
+    phone: "23000001",
+    password: "Chef@12345",
+    isActive: true,
+    agencyId: 1,
+  },
+  {
+    id: 8,
+    name: "Support Retours Tunis",
+    email: "support@umbrella.tn",
+    role: "SUPPORT",
+    phone: "23000002",
+    password: "Support@12345",
+    isActive: true,
+    agencyId: 1,
+  },
+  {
+    id: 9,
+    name: "Pickup Tunis",
+    email: "pickup@umbrella.tn",
+    role: "PICKUP",
+    phone: "23000003",
+    password: "Pickup@12345",
+    isActive: true,
+    agencyId: 1,
+  },
+  {
+    id: 10,
+    name: "Magasinier Tunis",
+    email: "magasinier@umbrella.tn",
+    role: "MAGASINIER",
+    phone: "23000004",
+    password: "Magasin@12345",
+    isActive: true,
+    agencyId: 1,
+  },
+];
+
+export const MOCK_AGENCIES: Agency[] = [
+  {
+    id: 1,
+    name: "Agence Tunis",
+    governorate: "Tunis",
+    isActive: true,
+  },
+  {
+    id: 2,
+    name: "Agence Sousse",
+    governorate: "Sousse",
+    isActive: true,
+  },
+  {
+    id: 3,
+    name: "Agence Sfax",
+    governorate: "Sfax",
     isActive: true,
   },
 ];

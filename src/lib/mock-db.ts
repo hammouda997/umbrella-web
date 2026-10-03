@@ -6,7 +6,9 @@ import type {
   TicketStatus,
   TimelineEntry,
 } from "@/lib/domain";
+import type { Agency } from "@/lib/domain";
 import {
+  MOCK_AGENCIES,
   MOCK_PARCELS,
   MOCK_PAYMENTS,
   MOCK_TICKETS,
@@ -18,6 +20,7 @@ import {
   type MockUser,
   type MockZone,
 } from "@/lib/mock-data";
+import { AGENCY_ROLES, roleNeedsAgency } from "@/lib/roles";
 import {
   canTransition,
   requiresComment,
@@ -37,7 +40,7 @@ import { STATUS_META } from "@/lib/status-meta";
  * so the UI behaves the same with NEXT_PUBLIC_USE_MOCK=true or against umbrella/api.
  */
 
-const STORAGE_KEY = "umbrella.mock-db.v3";
+const STORAGE_KEY = "umbrella.mock-db.v4";
 export const MOCK_RESET_EVENT = "umbrella:mock-db-reset";
 
 type MockDb = {
@@ -46,10 +49,18 @@ type MockDb = {
   tickets: MockTicket[];
   payments: MockPayment[];
   zones: MockZone[];
+  agencies: Agency[];
   statusCategories: StatusCategory[];
 };
 
-type Actor = { id: number; role: AppRole; name: string; email: string; phone: string };
+type Actor = {
+  id: number;
+  role: AppRole;
+  name: string;
+  email: string;
+  phone: string;
+  agencyId?: number | null;
+};
 
 export class MockHttpError extends Error {
   constructor(
@@ -62,6 +73,14 @@ export class MockHttpError extends Error {
 }
 
 const STAFF: AppRole[] = ["SUPER_ADMIN", "ADMIN"];
+const OPS_STAFF: AppRole[] = ["SUPER_ADMIN", "ADMIN", "CHEF_AGENCE"];
+const RETURN_STATUSES_LIST = [
+  "RETOUR_DEPOT",
+  "RETOUR_DEFINITIF",
+  "RETOUR_INTER_AGENCE",
+  "RETOUR_EXPEDITEURS",
+  "RETOUR_RECU",
+];
 const DELIVERED = ["LIVRES", "LIVRES_PAYES"];
 const SENDER_EDITABLE = ["EN_ATTENTE", "NON_SERIEUX"];
 const RETURN_PREFIX = "RETOUR";
@@ -111,15 +130,21 @@ function seedStatusCategories(): StatusCategory[] {
 
 function seedDb(): MockDb {
   const seededAt = new Date().toISOString();
+  const agencies = structuredClone(MOCK_AGENCIES);
+  const agencyByGov = new Map(
+    agencies.map((a) => [a.governorate.toLowerCase(), a.id] as const),
+  );
   return structuredClone({
     users: MOCK_USERS.map((u) => ({ ...u, createdAt: u.createdAt ?? seededAt })),
     parcels: MOCK_PARCELS.map((p) => ({
       ...p,
+      agencyId: agencyByGov.get(p.governorate.toLowerCase()) ?? null,
       timeline: p.timeline ?? [{ at: p.createdAt, label: "Colis créé" }],
     })),
     tickets: MOCK_TICKETS,
     payments: MOCK_PAYMENTS,
     zones: MOCK_ZONES,
+    agencies,
     statusCategories: seedStatusCategories(),
   });
 }
@@ -133,6 +158,18 @@ function isMockDb(value: unknown): value is MockDb {
   if (!baseOk) return false;
   if (!Array.isArray(v.statusCategories)) {
     v.statusCategories = seedStatusCategories();
+  }
+  if (!Array.isArray(v.agencies)) {
+    v.agencies = structuredClone(MOCK_AGENCIES);
+  }
+  const agencies = v.agencies as Agency[];
+  const agencyByGov = new Map(
+    agencies.map((a) => [a.governorate.toLowerCase(), a.id] as const),
+  );
+  for (const p of v.parcels as MockParcel[]) {
+    if (p.agencyId == null && p.governorate) {
+      p.agencyId = agencyByGov.get(p.governorate.toLowerCase()) ?? null;
+    }
   }
   return true;
 }
@@ -186,6 +223,14 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function agencyRef(agencyId?: number | null) {
+  if (!agencyId) return null;
+  const agency = db().agencies.find((a) => a.id === agencyId);
+  return agency
+    ? { id: agency.id, name: agency.name, governorate: agency.governorate }
+    : null;
+}
+
 function publicUser(u: MockUser) {
   return {
     id: u.id,
@@ -193,6 +238,8 @@ function publicUser(u: MockUser) {
     email: u.email,
     phone: u.phone,
     role: u.role,
+    agencyId: u.agencyId ?? null,
+    agency: agencyRef(u.agencyId),
     isActive: u.isActive,
     createdAt: u.createdAt ?? nowIso(),
   };
@@ -209,6 +256,7 @@ function sessionFor(user: MockUser): AuthSession {
       email: user.email,
       role: user.role,
       phone: user.phone,
+      agencyId: user.agencyId ?? null,
     },
   };
 }
@@ -218,7 +266,14 @@ function actorFromToken(token?: string): Actor | null {
   const id = Number(token.replace("mock-access-", ""));
   const user = db().users.find((u) => u.id === id && u.isActive);
   if (!user) return null;
-  return { id: user.id, role: user.role, name: user.name, email: user.email, phone: user.phone };
+  return {
+    id: user.id,
+    role: user.role,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    agencyId: user.agencyId ?? null,
+  };
 }
 
 function requireActor(actor: Actor | null, roles?: AppRole[]): Actor {
@@ -269,12 +324,57 @@ function pushEvent(
   parcel.updatedAt = entry.at;
 }
 
+function agencyIdForGov(governorate: string): number | null {
+  const hit = db().agencies.find(
+    (a) => a.isActive && a.governorate.toLowerCase() === governorate.toLowerCase(),
+  );
+  return hit?.id ?? null;
+}
+
+function enrichParcel(parcel: MockParcel): MockParcel {
+  const sender = parcel.senderId
+    ? db().users.find((u) => u.id === parcel.senderId)
+    : null;
+  const driver = parcel.driverId
+    ? db().users.find((u) => u.id === parcel.driverId)
+    : null;
+  return {
+    ...parcel,
+    agency: agencyRef(parcel.agencyId),
+    sender: sender
+      ? {
+          id: sender.id,
+          name: sender.name,
+          email: sender.email,
+          phone: sender.phone,
+        }
+      : parcel.sender,
+    driver: driver
+      ? { id: driver.id, name: driver.name, phone: driver.phone }
+      : parcel.driver,
+  };
+}
+
 function scopeParcels(actor: Actor): MockParcel[] {
   const live = db().parcels.filter((p) => p.status !== "SUPPRIME");
-  if (isStaff(actor)) return live;
-  if (actor.role === "LIVREUR") return live.filter((p) => p.driverId === actor.id);
-  if (actor.role === "CLIENT") return live.filter((p) => p.phone === actor.phone);
-  return live.filter((p) => p.senderId === actor.id);
+  let list: MockParcel[];
+  if (isStaff(actor)) list = live;
+  else if (AGENCY_ROLES.includes(actor.role)) {
+    const agencyId = actor.agencyId;
+    if (!agencyId) return [];
+    const scoped = live.filter((p) => p.agencyId === agencyId);
+    list =
+      actor.role === "SUPPORT"
+        ? scoped.filter((p) => RETURN_STATUSES_LIST.includes(p.status))
+        : scoped;
+  } else if (actor.role === "LIVREUR") {
+    list = live.filter((p) => p.driverId === actor.id);
+  } else if (actor.role === "CLIENT") {
+    list = live.filter((p) => p.phone === actor.phone);
+  } else {
+    list = live.filter((p) => p.senderId === actor.id);
+  }
+  return list.map(enrichParcel);
 }
 
 function findScopedParcel(actor: Actor, id: number): MockParcel {
@@ -283,11 +383,24 @@ function findScopedParcel(actor: Actor, id: number): MockParcel {
   return parcel;
 }
 
+function inAgency(actor: Actor, parcel: MockParcel): boolean {
+  return (
+    AGENCY_ROLES.includes(actor.role) &&
+    !!actor.agencyId &&
+    parcel.agencyId === actor.agencyId
+  );
+}
+
 function ownedOrStaff(actor: Actor, id: number): MockParcel {
   const parcel = db().parcels.find((p) => p.id === id && p.status !== "SUPPRIME");
   if (!parcel) throw new MockHttpError(404, "Colis introuvable");
-  if (isStaff(actor)) return parcel;
-  if (actor.role === "EXPEDITEUR" && parcel.senderId === actor.id) return parcel;
+  if (isStaff(actor)) return enrichParcel(parcel);
+  if (actor.role === "CHEF_AGENCE" && inAgency(actor, parcel)) {
+    return enrichParcel(parcel);
+  }
+  if (actor.role === "EXPEDITEUR" && parcel.senderId === actor.id) {
+    return enrichParcel(parcel);
+  }
   throw new MockHttpError(403, "Accès refusé");
 }
 
@@ -313,7 +426,11 @@ function applyParcelFields(target: MockParcel, dto: Record<string, unknown>) {
 
   target.recipientName = required("recipientName", target.recipientName);
   target.phone = required("phone", target.phone);
+  const prevGov = target.governorate;
   target.governorate = required("governorate", target.governorate);
+  if (dto.governorate !== undefined && target.governorate !== prevGov) {
+    target.agencyId = agencyIdForGov(target.governorate);
+  }
   target.city = required("city", target.city);
   target.address = required("address", target.address);
   target.phone2 = optionalText("phone2", target.phone2);
@@ -409,20 +526,22 @@ function createParcel(actor: Actor, dto: Record<string, unknown>) {
     createdAt: at,
     updatedAt: at,
     senderId: actor.id,
-    sender: { id: actor.id, name: actor.name, email: actor.email },
+    sender: { id: actor.id, name: actor.name, email: actor.email, phone: actor.phone },
     driverId: null,
     driver: null,
     zone: null,
+    agencyId: agencyIdForGov(governorate),
     articleCount: 1,
     parcelCount: 1,
     timeline: [],
   };
   applyParcelFields(parcel, dto);
   parcel.tryProduct = bool(dto.tryProduct) ?? bool(dto.allowOpen) ?? false;
+  if (!parcel.agencyId) parcel.agencyId = agencyIdForGov(parcel.governorate);
   pushEvent(parcel, "Colis créé", { status: "EN_ATTENTE", actor });
   db().parcels.unshift(parcel);
   commit();
-  return parcel;
+  return enrichParcel(parcel);
 }
 
 function trackParcel(code: string) {
@@ -678,13 +797,57 @@ function usersFor(actor: Actor) {
     .map(publicUser);
 }
 
+const ALL_ROLES: AppRole[] = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "CHEF_AGENCE",
+  "SUPPORT",
+  "PICKUP",
+  "MAGASINIER",
+  "EXPEDITEUR",
+  "LIVREUR",
+  "CLIENT",
+];
+
+const ADMIN_CREATABLE: AppRole[] = [
+  "ADMIN",
+  "SUPPORT",
+  "PICKUP",
+  "MAGASINIER",
+  "EXPEDITEUR",
+  "LIVREUR",
+  "CLIENT",
+];
+
+function resolveAgencyId(role: AppRole, agencyId?: number | null): number | null {
+  if (roleNeedsAgency(role)) {
+    if (agencyId == null) {
+      throw new MockHttpError(400, "agencyId is required for this role");
+    }
+    const agency = db().agencies.find((a) => a.id === agencyId && a.isActive);
+    if (!agency) throw new MockHttpError(400, "Agency not found");
+    return agency.id;
+  }
+  return agencyId ?? null;
+}
+
 function createUser(actor: Actor, dto: Record<string, unknown>) {
   const role = dto.role as AppRole;
-  if (!["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR", "CLIENT"].includes(role)) {
+  if (!ALL_ROLES.includes(role)) {
     throw new MockHttpError(400, "Rôle invalide");
+  }
+  if (actor.role === "ADMIN") {
+    if (!ADMIN_CREATABLE.includes(role)) {
+      throw new MockHttpError(403, "Admins cannot create this role");
+    }
+  } else if (actor.role !== "SUPER_ADMIN") {
+    throw new MockHttpError(403, "Accès refusé");
   }
   if (role === "SUPER_ADMIN" && actor.role !== "SUPER_ADMIN") {
     throw new MockHttpError(403, "Seul un super admin peut créer ce rôle");
+  }
+  if (role === "CHEF_AGENCE" && actor.role !== "SUPER_ADMIN") {
+    throw new MockHttpError(403, "Seul un super admin peut créer un chef d'agence");
   }
   const email = str(dto.email)?.toLowerCase();
   const name = str(dto.name);
@@ -697,6 +860,7 @@ function createUser(actor: Actor, dto: Record<string, unknown>) {
   if (db().users.some((u) => u.email.toLowerCase() === email)) {
     throw new MockHttpError(409, "Email déjà utilisé");
   }
+  const agencyId = resolveAgencyId(role, num(dto.agencyId) ?? null);
   const user: MockUser = {
     id: nextId(db().users),
     name,
@@ -705,6 +869,7 @@ function createUser(actor: Actor, dto: Record<string, unknown>) {
     phone: str(dto.phone) ?? "",
     password,
     isActive: true,
+    agencyId,
     createdAt: nowIso(),
   };
   db().users.push(user);
@@ -718,7 +883,10 @@ function setUserActive(actor: Actor, id: number, dto: Record<string, unknown>) {
   if (target.id === actor.id) {
     throw new MockHttpError(400, "Impossible de modifier votre propre statut");
   }
-  if (actor.role === "ADMIN" && target.role === "SUPER_ADMIN") {
+  if (
+    actor.role === "ADMIN" &&
+    (target.role === "SUPER_ADMIN" || target.role === "CHEF_AGENCE")
+  ) {
     throw new MockHttpError(403, "Accès refusé");
   }
   target.isActive = Boolean(dto.isActive);
@@ -729,25 +897,43 @@ function setUserActive(actor: Actor, id: number, dto: Record<string, unknown>) {
 function updateUser(actor: Actor, id: number, dto: Record<string, unknown>) {
   const target = db().users.find((u) => u.id === id);
   if (!target) throw new MockHttpError(404, "Utilisateur introuvable");
-  if (actor.role === "ADMIN" && target.role === "SUPER_ADMIN") {
-    throw new MockHttpError(403, "Les admins ne peuvent pas gérer les super-admins");
-  }
   if (actor.role !== "SUPER_ADMIN" && actor.role !== "ADMIN") {
     throw new MockHttpError(403, "Accès refusé");
   }
+  if (
+    actor.role === "ADMIN" &&
+    (target.role === "SUPER_ADMIN" || target.role === "CHEF_AGENCE")
+  ) {
+    throw new MockHttpError(403, "Les admins ne peuvent pas gérer cet utilisateur");
+  }
 
-  const nextRole = dto.role as AppRole | undefined;
-  if (nextRole) {
-    if (!["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR", "CLIENT"].includes(nextRole)) {
+  const nextRole = (dto.role as AppRole | undefined) ?? target.role;
+  if (dto.role !== undefined) {
+    if (!ALL_ROLES.includes(nextRole)) {
       throw new MockHttpError(400, "Rôle invalide");
     }
-    if (nextRole === "SUPER_ADMIN" && actor.role !== "SUPER_ADMIN") {
+    if (
+      (nextRole === "SUPER_ADMIN" || nextRole === "CHEF_AGENCE") &&
+      actor.role !== "SUPER_ADMIN"
+    ) {
       throw new MockHttpError(403, "Seul un super admin peut assigner ce rôle");
+    }
+    if (actor.role === "ADMIN" && !ADMIN_CREATABLE.includes(nextRole)) {
+      throw new MockHttpError(403, "Admins cannot assign this role");
     }
     if (target.id === actor.id && nextRole !== target.role) {
       throw new MockHttpError(400, "Impossible de changer votre propre rôle");
     }
     target.role = nextRole;
+  }
+
+  if (dto.agencyId !== undefined || dto.role !== undefined) {
+    target.agencyId = roleNeedsAgency(nextRole)
+      ? resolveAgencyId(
+          nextRole,
+          dto.agencyId !== undefined ? (num(dto.agencyId) ?? null) : (target.agencyId ?? null),
+        )
+      : null;
   }
 
   const email = str(dto.email)?.toLowerCase();
@@ -950,8 +1136,36 @@ type Route = {
   handler: (ctx: { actor: Actor; params: string[]; body: Record<string, unknown> }) => unknown;
 };
 
-const SENDERS: AppRole[] = ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR"];
-const ALL: AppRole[] = ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR", "CLIENT"];
+const SENDERS: AppRole[] = ["SUPER_ADMIN", "ADMIN", "CHEF_AGENCE", "EXPEDITEUR"];
+const ALL: AppRole[] = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "CHEF_AGENCE",
+  "SUPPORT",
+  "PICKUP",
+  "MAGASINIER",
+  "EXPEDITEUR",
+  "LIVREUR",
+  "CLIENT",
+];
+const PARCEL_OPS: AppRole[] = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "CHEF_AGENCE",
+  "SUPPORT",
+  "PICKUP",
+  "MAGASINIER",
+  "LIVREUR",
+];
+const SCAN_ROLES: AppRole[] = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "CHEF_AGENCE",
+  "SUPPORT",
+  "PICKUP",
+  "MAGASINIER",
+  "LIVREUR",
+];
 
 const ROUTES: Route[] = [
   { method: "GET", pattern: /^\/parcels$/, handler: ({ actor }) => scopeParcels(actor) },
@@ -972,7 +1186,7 @@ const ROUTES: Route[] = [
   {
     method: "POST",
     pattern: /^\/parcels\/scan$/,
-    roles: ["SUPER_ADMIN", "ADMIN", "LIVREUR"],
+    roles: SCAN_ROLES,
     handler: ({ actor, body }) => {
       const code = str(body.code)?.trim() ?? "";
       const hit = db().parcels.find(
@@ -983,6 +1197,9 @@ const ROUTES: Route[] = [
       if (!hit) throw new MockHttpError(404, "Colis introuvable");
       if (actor.role === "LIVREUR" && hit.driverId !== actor.id) {
         throw new MockHttpError(403, "Ce colis ne vous est pas assigné");
+      }
+      if (AGENCY_ROLES.includes(actor.role) && !inAgency(actor, hit)) {
+        throw new MockHttpError(403, "Colis hors de votre agence");
       }
       const status = body.status ? String(body.status) : null;
       if (!status) {
@@ -1066,7 +1283,7 @@ const ROUTES: Route[] = [
   {
     method: "PATCH",
     pattern: /^\/parcels\/(\d+)\/assign$/,
-    roles: STAFF,
+    roles: OPS_STAFF,
     handler: ({ actor, params, body }) => {
       const parcel = ownedOrStaff(actor, Number(params[0]));
       if (parcel.mode !== "INTERNAL") {
@@ -1076,18 +1293,19 @@ const ROUTES: Route[] = [
         (u) => u.id === Number(body.driverId) && u.role === "LIVREUR" && u.isActive,
       );
       if (!driver) throw new MockHttpError(400, "Livreur introuvable");
-      parcel.driverId = driver.id;
-      parcel.driver = { id: driver.id, name: driver.name };
-      parcel.status = "A_ENLEVER";
-      pushEvent(parcel, `Assigné à ${driver.name}`, { status: "A_ENLEVER", actor });
+      const raw = db().parcels.find((p) => p.id === parcel.id)!;
+      raw.driverId = driver.id;
+      raw.driver = { id: driver.id, name: driver.name, phone: driver.phone };
+      raw.status = "A_ENLEVER";
+      pushEvent(raw, `Assigné à ${driver.name}`, { status: "A_ENLEVER", actor });
       commit();
-      return parcel;
+      return enrichParcel(raw);
     },
   },
   {
     method: "PATCH",
     pattern: /^\/parcels\/(\d+)\/status$/,
-    roles: ["SUPER_ADMIN", "ADMIN", "LIVREUR"],
+    roles: PARCEL_OPS,
     handler: ({ actor, params, body }) => {
       const parcel = db().parcels.find(
         (p) => p.id === Number(params[0]) && p.status !== "SUPPRIME",
@@ -1095,6 +1313,9 @@ const ROUTES: Route[] = [
       if (!parcel) throw new MockHttpError(404, "Colis introuvable");
       if (actor.role === "LIVREUR" && parcel.driverId !== actor.id) {
         throw new MockHttpError(403, "Ce colis ne vous est pas assigné");
+      }
+      if (AGENCY_ROLES.includes(actor.role) && !inAgency(actor, parcel)) {
+        throw new MockHttpError(403, "Colis hors de votre agence");
       }
       const status = String(body.status ?? "");
       if (!(status in STATUS_META)) throw new MockHttpError(400, "Statut invalide");
@@ -1114,7 +1335,7 @@ const ROUTES: Route[] = [
         actor,
       });
       commit();
-      return parcel;
+      return enrichParcel(parcel);
     },
   },
   { method: "GET", pattern: /^\/tickets$/, handler: ({ actor }) => ticketsFor(actor) },
@@ -1150,8 +1371,104 @@ const ROUTES: Route[] = [
   },
   {
     method: "GET",
+    pattern: /^\/agencies$/,
+    roles: ["SUPER_ADMIN", "ADMIN", "CHEF_AGENCE"],
+    handler: () => {
+      const store = db();
+      return store.agencies
+        .map((a) => ({
+          ...a,
+          userCount: store.users.filter((u) => u.agencyId === a.id).length,
+          parcelCount: store.parcels.filter(
+            (p) => p.agencyId === a.id && p.status !== "SUPPRIME",
+          ).length,
+        }))
+        .sort((a, b) => a.governorate.localeCompare(b.governorate, "fr"));
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/agencies$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ body }) => {
+      const name = str(body.name);
+      const governorate = str(body.governorate);
+      if (!name || name.length < 2) throw new MockHttpError(400, "Nom invalide");
+      if (!governorate) throw new MockHttpError(400, "Gouvernorat requis");
+      if (
+        db().agencies.some(
+          (a) => a.governorate.toLowerCase() === governorate.toLowerCase(),
+        )
+      ) {
+        throw new MockHttpError(409, `Agency for ${governorate} already exists`);
+      }
+      const agency: Agency = {
+        id: nextId(db().agencies),
+        name,
+        governorate,
+        isActive: true,
+      };
+      db().agencies.push(agency);
+      commit();
+      return agency;
+    },
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/agencies\/(\d+)$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ params, body }) => {
+      const agency = db().agencies.find((a) => a.id === Number(params[0]));
+      if (!agency) throw new MockHttpError(404, "Agency not found");
+      if (body.name !== undefined) {
+        const name = str(body.name);
+        if (!name || name.length < 2) throw new MockHttpError(400, "Nom invalide");
+        agency.name = name;
+      }
+      if (body.governorate !== undefined) {
+        const governorate = str(body.governorate);
+        if (!governorate) throw new MockHttpError(400, "Gouvernorat requis");
+        if (
+          db().agencies.some(
+            (a) =>
+              a.id !== agency.id &&
+              a.governorate.toLowerCase() === governorate.toLowerCase(),
+          )
+        ) {
+          throw new MockHttpError(409, `Agency for ${governorate} already exists`);
+        }
+        agency.governorate = governorate;
+      }
+      if (body.isActive !== undefined) agency.isActive = Boolean(body.isActive);
+      commit();
+      return agency;
+    },
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/agencies\/(\d+)$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ params }) => {
+      const id = Number(params[0]);
+      const store = db();
+      if (!store.agencies.some((a) => a.id === id)) {
+        throw new MockHttpError(404, "Agency not found");
+      }
+      store.agencies = store.agencies.filter((a) => a.id !== id);
+      for (const p of store.parcels) {
+        if (p.agencyId === id) p.agencyId = null;
+      }
+      for (const u of store.users) {
+        if (u.agencyId === id) u.agencyId = null;
+      }
+      commit();
+      return { id, deleted: true };
+    },
+  },
+  {
+    method: "GET",
     pattern: /^\/zones$/,
-    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR"],
+    roles: ["SUPER_ADMIN", "ADMIN", "CHEF_AGENCE", "EXPEDITEUR", "LIVREUR"],
     handler: ({ actor }) => zonesFor(actor),
   },
   {
@@ -1210,7 +1527,7 @@ const ROUTES: Route[] = [
   {
     method: "GET",
     pattern: /^\/status-categories$/,
-    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR", "CLIENT"],
+    roles: ALL,
     handler: () =>
       [...db().statusCategories].sort(
         (a, b) => a.sortOrder - b.sortOrder || a.id - b.id,
@@ -1337,7 +1654,7 @@ const ROUTES: Route[] = [
   {
     method: "GET",
     pattern: /^\/dashboard\/analytics$/,
-    roles: SENDERS,
+    roles: ["SUPER_ADMIN", "ADMIN", "CHEF_AGENCE", "EXPEDITEUR"],
     handler: ({ actor }) => analytics(actor),
   },
   { method: "GET", pattern: /^\/cod$/, roles: STAFF, handler: () => codPayload() },

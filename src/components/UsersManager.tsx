@@ -25,7 +25,8 @@ import {
 } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import type { UserRow } from "@/lib/domain";
-import { ROLE_LABEL, type AppRole } from "@/lib/roles";
+import type { Agency } from "@/lib/domain";
+import { ROLE_LABEL, roleNeedsAgency, type AppRole } from "@/lib/roles";
 import { SortableTh, useTableSort } from "@/lib/table-sort";
 import { useApi, useApiQuery } from "@/lib/use-api";
 
@@ -41,6 +42,10 @@ const USER_SORT = {
 const CREATABLE_ROLES: AppRole[] = [
   "SUPER_ADMIN",
   "ADMIN",
+  "CHEF_AGENCE",
+  "SUPPORT",
+  "PICKUP",
+  "MAGASINIER",
   "EXPEDITEUR",
   "LIVREUR",
   "CLIENT",
@@ -49,6 +54,10 @@ const CREATABLE_ROLES: AppRole[] = [
 const ROLE_TONE: Record<AppRole, BadgeTone> = {
   SUPER_ADMIN: "brand",
   ADMIN: "gold",
+  CHEF_AGENCE: "warning",
+  SUPPORT: "info",
+  PICKUP: "success",
+  MAGASINIER: "info",
   EXPEDITEUR: "info",
   LIVREUR: "success",
   CLIENT: "neutral",
@@ -95,18 +104,23 @@ export function UsersManager({
   const toast = useToast();
   const confirm = useConfirm();
   const { data, error, loading, reload } = useApiQuery<UserRow[]>("/users");
+  const agenciesQuery = useApiQuery<Agency[]>("/agencies");
   const users = useMemo(() => data ?? [], [data]);
+  const agencies = useMemo(() => agenciesQuery.data ?? [], [agenciesQuery.data]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("ALL");
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
+  const [draftRole, setDraftRole] = useState<AppRole>("EXPEDITEUR");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const roles = allowSuperAdmin
     ? CREATABLE_ROLES
-    : CREATABLE_ROLES.filter((r) => r !== "SUPER_ADMIN");
+    : CREATABLE_ROLES.filter(
+        (r) => r !== "SUPER_ADMIN" && r !== "CHEF_AGENCE",
+      );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -135,12 +149,17 @@ export function UsersManager({
     if (Object.keys(nextErrors).length) return;
     setSaving(true);
     try {
+      const role = String(form.get("role")) as AppRole;
+      const agencyRaw = String(form.get("agencyId") ?? "");
       const user = await request<UserRow>("/users", "POST", {
         name: String(form.get("name")).trim(),
         email: String(form.get("email")).trim(),
         password: String(form.get("password")),
         phone: String(form.get("phone") ?? "").trim() || undefined,
-        role: form.get("role"),
+        role,
+        agencyId: roleNeedsAgency(role)
+          ? Number(agencyRaw) || undefined
+          : null,
       });
       toast.success("Compte créé", `${user.name} · ${ROLE_LABEL[user.role]}`);
       setCreating(false);
@@ -161,11 +180,16 @@ export function UsersManager({
     if (Object.keys(nextErrors).length) return;
 
     const password = String(form.get("password") ?? "");
+    const role = String(form.get("role")) as AppRole;
+    const agencyRaw = String(form.get("agencyId") ?? "");
     const payload: Record<string, unknown> = {
       name: String(form.get("name")).trim(),
       email: String(form.get("email")).trim(),
       phone: String(form.get("phone") ?? "").trim() || undefined,
-      role: form.get("role"),
+      role,
+      agencyId: roleNeedsAgency(role)
+        ? Number(agencyRaw) || undefined
+        : null,
     };
     if (password) payload.password = password;
 
@@ -226,6 +250,7 @@ export function UsersManager({
             icon={UserPlus}
             onClick={() => {
               setErrors({});
+              setDraftRole(roles.includes("EXPEDITEUR") ? "EXPEDITEUR" : roles[0]!);
               setCreating(true);
             }}
           >
@@ -349,6 +374,11 @@ export function UsersManager({
                       <Badge tone={ROLE_TONE[u.role]}>
                         {ROLE_LABEL[u.role]}
                       </Badge>
+                      {u.agency ? (
+                        <p className="mt-1 text-[11px] text-ops-ink/45">
+                          {u.agency.name}
+                        </p>
+                      ) : null}
                     </td>
                     <td className={tdClass}>
                       <Badge tone={u.isActive ? "success" : "neutral"} dot>
@@ -364,6 +394,7 @@ export function UsersManager({
                             icon={Pencil}
                             onClick={() => {
                               setErrors({});
+                              setDraftRole(u.role);
                               setEditing(u);
                             }}
                           >
@@ -448,13 +479,35 @@ export function UsersManager({
             hint="8 caractères minimum"
             error={errors.password}
           />
-          <SelectField name="role" label="Rôle" defaultValue="EXPEDITEUR">
+          <SelectField
+            name="role"
+            label="Rôle"
+            value={draftRole}
+            onChange={(e) => setDraftRole(e.target.value as AppRole)}
+          >
             {roles.map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}
               </option>
             ))}
           </SelectField>
+          {roleNeedsAgency(draftRole) ? (
+            <SelectField
+              name="agencyId"
+              label="Agence (gouvernorat)"
+              required
+              wrapperClassName="sm:col-span-2"
+            >
+              <option value="">Choisir une agence…</option>
+              {agencies
+                .filter((a) => a.isActive)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} · {a.governorate}
+                  </option>
+                ))}
+            </SelectField>
+          ) : null}
         </form>
       </Modal>
 
@@ -516,6 +569,7 @@ export function UsersManager({
               label="Rôle"
               defaultValue={editing.role}
               disabled={editing.id === session?.user.id}
+              onChange={(e) => setDraftRole(e.target.value as AppRole)}
             >
               {roles.map((r) => (
                 <option key={r} value={r}>
@@ -523,6 +577,24 @@ export function UsersManager({
                 </option>
               ))}
             </SelectField>
+            {roleNeedsAgency(draftRole) || roleNeedsAgency(editing.role) ? (
+              <SelectField
+                name="agencyId"
+                label="Agence (gouvernorat)"
+                defaultValue={
+                  editing.agencyId != null ? String(editing.agencyId) : ""
+                }
+                required={roleNeedsAgency(draftRole)}
+                wrapperClassName="sm:col-span-2"
+              >
+                <option value="">Choisir une agence…</option>
+                {agencies.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} · {a.governorate}
+                  </option>
+                ))}
+              </SelectField>
+            ) : null}
             <TextField
               name="password"
               type="password"

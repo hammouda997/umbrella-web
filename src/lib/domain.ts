@@ -31,11 +31,18 @@ export type Parcel = {
   createdAt: string;
   updatedAt?: string;
   senderId: number;
-  sender?: { id: number; name: string; email: string } | null;
+  sender?: {
+    id: number;
+    name: string;
+    email: string;
+    phone?: string | null;
+  } | null;
   driverId?: number | null;
-  driver?: PersonRef | null;
+  driver?: (PersonRef & { phone?: string | null }) | null;
   zoneId?: number | null;
   zone?: PersonRef | null;
+  agencyId?: number | null;
+  agency?: { id: number; name: string; governorate: string } | null;
   timeline?: TimelineEntry[];
   allowOpen?: boolean;
   tryProduct?: boolean;
@@ -90,12 +97,24 @@ export type Zone = {
   parcelCount?: number;
 };
 
+/** Gouvernorat agency — separate from livreur fleet Zone. */
+export type Agency = {
+  id: number;
+  name: string;
+  governorate: string;
+  isActive: boolean;
+  userCount?: number;
+  parcelCount?: number;
+};
+
 export type UserRow = {
   id: number;
   name: string;
   email: string;
   phone: string | null;
   role: AppRole;
+  agencyId?: number | null;
+  agency?: { id: number; name: string; governorate: string } | null;
   isActive: boolean;
   createdAt: string;
 };

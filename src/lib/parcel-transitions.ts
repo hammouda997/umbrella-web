@@ -55,6 +55,25 @@ const LIVREUR_TARGETS = new Set<StatusKey>([
   "NON_SERIEUX",
 ]);
 
+const PICKUP_TARGETS = new Set<StatusKey>(["A_ENLEVER", "ENLEVES", "AU_DEPOT"]);
+
+const MAGASINIER_TARGETS = new Set<StatusKey>([
+  "AU_DEPOT",
+  "EN_COURS",
+  "RETOUR_DEPOT",
+  "RETOUR_INTER_AGENCE",
+  "RETOUR_EXPEDITEURS",
+  "RETOUR_RECU",
+]);
+
+const SUPPORT_TARGETS = new Set<StatusKey>([
+  "RETOUR_DEPOT",
+  "RETOUR_INTER_AGENCE",
+  "RETOUR_EXPEDITEURS",
+  "RETOUR_RECU",
+  "RETOUR_DEFINITIF",
+]);
+
 const COMMENT_REQUIRED = new Set<StatusKey>([
   "A_VERIFIER",
   "RETOUR_DEPOT",
@@ -99,6 +118,24 @@ export function canTransition(
     return {
       ok: false,
       reason: `Action réservée au dépôt (${STATUS_META[to].label})`,
+    };
+  }
+  if (role === "PICKUP" && !PICKUP_TARGETS.has(to)) {
+    return {
+      ok: false,
+      reason: `Pickup : transition non autorisée vers ${STATUS_META[to].label}`,
+    };
+  }
+  if (role === "MAGASINIER" && !MAGASINIER_TARGETS.has(to)) {
+    return {
+      ok: false,
+      reason: `Magasinier : transition non autorisée vers ${STATUS_META[to].label}`,
+    };
+  }
+  if (role === "SUPPORT" && !SUPPORT_TARGETS.has(to)) {
+    return {
+      ok: false,
+      reason: "Support : seuls les retours peuvent être vérifiés",
     };
   }
   return { ok: true };

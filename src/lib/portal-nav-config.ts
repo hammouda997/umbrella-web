@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Box,
+  Building2,
   CreditCard,
   Home,
   MapPin,
@@ -111,6 +112,95 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
     ];
   }
 
+  if (role === "SUPPORT") {
+    return [
+      { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
+      {
+        href: `${base}/retours`,
+        label: "Retours",
+        icon: RefreshCw,
+        mobilePrimary: true,
+      },
+      {
+        href: `${base}/scanner`,
+        label: "Scanner",
+        icon: ScanLine,
+        mobilePrimary: true,
+      },
+      { href: `${base}/settings`, label: "Paramètres", icon: Settings },
+    ];
+  }
+
+  if (role === "PICKUP") {
+    return [
+      { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
+      {
+        href: `${base}/parcels`,
+        label: "Colis",
+        icon: Package,
+        mobilePrimary: true,
+      },
+      {
+        href: `${base}/scanner`,
+        label: "Scanner",
+        icon: ScanLine,
+        mobilePrimary: true,
+      },
+      { href: `${base}/settings`, label: "Paramètres", icon: Settings },
+    ];
+  }
+
+  if (role === "MAGASINIER") {
+    return [
+      { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
+      {
+        href: `${base}/parcels`,
+        label: "Colis",
+        icon: Package,
+        mobilePrimary: true,
+      },
+      {
+        href: `${base}/retours`,
+        label: "Retours",
+        icon: RefreshCw,
+        mobilePrimary: true,
+      },
+      {
+        href: `${base}/scanner`,
+        label: "Scanner",
+        icon: ScanLine,
+        mobilePrimary: true,
+      },
+      { href: `${base}/settings`, label: "Paramètres", icon: Settings },
+    ];
+  }
+
+  if (role === "CHEF_AGENCE") {
+    return [
+      { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
+      {
+        href: `${base}/parcels`,
+        label: "Colis",
+        icon: Package,
+        mobilePrimary: true,
+      },
+      {
+        href: `${base}/scanner`,
+        label: "Scanner",
+        icon: ScanLine,
+        mobilePrimary: true,
+      },
+      {
+        href: `${base}/dispatch`,
+        label: "Livraisons",
+        icon: Truck,
+        mobilePrimary: true,
+      },
+      { href: `${base}/analytics`, label: "Rapports", icon: BarChart3 },
+      { href: `${base}/settings`, label: "Paramètres", icon: Settings },
+    ];
+  }
+
   // ADMIN + SUPER_ADMIN
   const items: PortalNavDef[] = [
     { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
@@ -139,6 +229,11 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
   ];
 
   if (role === "SUPER_ADMIN") {
+    items.push({
+      href: `${base}/agencies`,
+      label: "Agences",
+      icon: Building2,
+    });
     items.push({
       href: `${base}/categories`,
       label: "Catégories",

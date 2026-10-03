@@ -48,7 +48,9 @@ type ScanAction = {
 
 function actionsForRole(status: string, role: AppRole): ScanAction[] {
   const gateRole: AppRole =
-    role === "SUPER_ADMIN" || role === "ADMIN" ? "ADMIN" : role;
+    role === "SUPER_ADMIN" || role === "ADMIN" || role === "CHEF_AGENCE"
+      ? "ADMIN"
+      : role;
 
   const fromLivreur = livreurActionsFor(status)
     .filter(
