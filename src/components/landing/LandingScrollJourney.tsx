@@ -68,7 +68,7 @@ const STEPS = [
     Icon: Package,
     tone: "cream" as const,
     at: 0.1,
-    style: { left: "15%", top: "52%" },
+    style: { left: "14%", top: "48%" },
   },
   {
     title: "Rapide",
@@ -76,7 +76,7 @@ const STEPS = [
     Icon: Zap,
     tone: "red" as const,
     at: 0.28,
-    style: { left: "34%", top: "2%" },
+    style: { left: "33%", top: "6%" },
   },
   {
     title: "Local",
@@ -84,7 +84,7 @@ const STEPS = [
     Icon: MapPinned,
     tone: "white" as const,
     at: 0.42,
-    style: { left: "48%", top: "48%" },
+    style: { left: "48%", top: "44%" },
   },
   {
     title: "Sûr",
@@ -92,7 +92,7 @@ const STEPS = [
     Icon: ShieldCheck,
     tone: "ink" as const,
     at: 0.56,
-    style: { left: "58%", top: "10%" },
+    style: { left: "58%", top: "8%" },
   },
   {
     title: "COD",
@@ -100,7 +100,7 @@ const STEPS = [
     Icon: Banknote,
     tone: "cream" as const,
     at: 0.72,
-    style: { left: "72%", top: "54%" },
+    style: { left: "72%", top: "48%" },
   },
   {
     title: "À l’heure",
@@ -108,7 +108,7 @@ const STEPS = [
     Icon: Clock3,
     tone: "red" as const,
     at: 0.88,
-    style: { left: "86%", top: "14%" },
+    style: { left: "86%", top: "12%" },
   },
 ] as const;
 
@@ -317,7 +317,7 @@ export function LandingScrollJourney() {
     <section
       ref={root}
       id="parcours"
-      className="relative flex flex-col overflow-hidden bg-[#EFE8E0] py-10 sm:py-12 md:py-14 lg:h-[100svh] lg:max-h-[100svh] lg:py-8"
+      className="relative overflow-hidden bg-[#EFE8E0] py-10 sm:py-12 md:py-14"
       aria-label="Parcours de livraison"
     >
       <div
@@ -330,21 +330,21 @@ export function LandingScrollJourney() {
         }}
       />
 
-      <div className="relative mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col px-5 sm:px-6 md:px-10 lg:px-14">
-        <div className="journey-headline relative z-20 mx-auto w-full max-w-xl shrink-0 text-center lg:mx-0 lg:text-left">
+      <div className="relative mx-auto flex w-full max-w-6xl flex-col px-5 sm:px-6 md:px-10 lg:px-14">
+        <div className="journey-headline relative z-20 mx-auto w-full max-w-xl text-center lg:mx-0 lg:text-left">
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#991211]/70 sm:text-[11px]">
             / En route
           </p>
-          <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-0.03em] text-black sm:mt-2 sm:text-3xl md:text-[2rem]">
+          <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-0.03em] text-black sm:text-3xl md:text-[2rem]">
             Du dépôt à la porte
           </h2>
-          <p className="mx-auto mt-1 max-w-lg text-[13px] leading-snug text-black/55 sm:mt-2 sm:text-[14px] lg:mx-0">
+          <p className="mx-auto mt-1 max-w-lg text-[13px] leading-snug text-black/55 sm:text-[14px] lg:mx-0">
             Pickup, transit, livraison et COD — suivi jusqu’à chez votre client.
           </p>
         </div>
 
         {/* Mobile — compact centered step list (no overlapping path cards) */}
-        <ul className="mt-3 grid grid-cols-2 content-start gap-2 overflow-hidden pb-2 sm:mt-4 sm:gap-2.5 lg:hidden">
+        <ul className="mt-4 grid grid-cols-2 content-start gap-2 sm:gap-2.5 lg:hidden">
           {STEPS.map((step, i) => {
             const Icon = step.Icon;
             const tone = TONE_CLASS[step.tone];
@@ -371,8 +371,8 @@ export function LandingScrollJourney() {
           })}
         </ul>
 
-        {/* Desktop — path + truck */}
-        <div className="journey-track relative mt-3 hidden min-h-0 w-full flex-1 lg:mt-4 lg:block">
+        {/* Desktop — path + truck (fixed height, no viewport stretch) */}
+        <div className="journey-track relative mt-4 hidden h-[320px] w-full lg:block xl:h-[340px]">
           <svg
             className="absolute inset-0 h-full w-full"
             viewBox="0 0 1000 360"

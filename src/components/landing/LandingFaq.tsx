@@ -9,9 +9,9 @@ export function LandingFaq() {
   return (
     <section
       id="faq"
-      className="relative flex flex-col overflow-hidden bg-white px-5 py-10 sm:px-6 sm:py-12 md:px-10 md:py-14 lg:h-[100svh] lg:max-h-[100svh] lg:py-8"
+      className="relative overflow-hidden bg-white px-5 py-10 sm:px-6 sm:py-12 md:px-10 md:py-14"
     >
-      <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col justify-center gap-6 lg:grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center lg:gap-12 xl:gap-16">
+      <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-start lg:gap-10">
         <header className="mx-auto w-full max-w-md shrink-0 text-center lg:mx-0 lg:max-w-none lg:text-left">
           <p className="reveal text-[10px] font-semibold uppercase tracking-[0.24em] text-[#986A36] sm:text-[11px]">
             / FAQ

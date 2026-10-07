@@ -58,7 +58,7 @@ export function LandingContact() {
   return (
     <section
       id="contact"
-      className="relative flex flex-col overflow-hidden bg-[#EFE8E0] px-5 py-10 sm:px-6 sm:py-12 md:px-10 md:py-14 lg:h-[100svh] lg:max-h-[100svh] lg:py-8"
+      className="relative overflow-hidden bg-[#EFE8E0] px-5 py-10 sm:px-6 sm:py-12 md:px-10 md:py-14"
     >
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.28]"
@@ -70,8 +70,8 @@ export function LandingContact() {
         }}
       />
 
-      <div className="relative mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
-        <div className="flex shrink-0 flex-col justify-center text-center lg:pr-4 lg:text-left">
+      <div className="relative mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
+        <div className="flex flex-col text-center lg:pr-4 lg:text-left">
           <p className="reveal text-[10px] font-semibold uppercase tracking-[0.24em] text-[#991211]/75 sm:text-[11px]">
             / Contact
           </p>
