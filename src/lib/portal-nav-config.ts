@@ -5,9 +5,11 @@ import {
   CreditCard,
   Home,
   MapPin,
+  MessageSquare,
   Package,
   Palette,
   RefreshCw,
+  Route,
   ScanLine,
   Settings,
   Ticket,
@@ -26,11 +28,29 @@ export type PortalNavDef = {
   mobilePrimary?: boolean;
 };
 
+function withMessages(base: string, items: PortalNavDef[]): PortalNavDef[] {
+  const settingsIdx = items.findIndex(
+    (i) =>
+      i.href.endsWith("/settings") ||
+      i.label === "Profil" ||
+      i.label === "Paramètres",
+  );
+  const msg: PortalNavDef = {
+    href: `${base}/messages`,
+    label: "Messages",
+    icon: MessageSquare,
+  };
+  if (settingsIdx >= 0) {
+    return [...items.slice(0, settingsIdx), msg, ...items.slice(settingsIdx)];
+  }
+  return [...items, msg];
+}
+
 export function portalNavFor(role: AppRole): PortalNavDef[] {
   const base = PORTAL_BY_ROLE[role];
 
   if (role === "LIVREUR") {
-    return [
+    return withMessages(base, [
       { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
       {
         href: `${base}/parcels`,
@@ -39,22 +59,26 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
         mobilePrimary: true,
       },
       {
+        href: `${base}/zones`,
+        label: "Zones",
+        icon: MapPin,
+        mobilePrimary: true,
+      },
+      {
         href: `${base}/scanner`,
         label: "Scanner",
         icon: ScanLine,
-        mobilePrimary: true,
       },
       {
         href: `${base}/settings`,
         label: "Profil",
         icon: Settings,
-        mobilePrimary: true,
       },
-    ];
+    ]);
   }
 
   if (role === "CLIENT") {
-    return [
+    return withMessages(base, [
       { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
       {
         href: `${base}/parcels`,
@@ -78,13 +102,12 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
         href: `${base}/settings`,
         label: "Profil",
         icon: Settings,
-        mobilePrimary: true,
       },
-    ];
+    ]);
   }
 
   if (role === "EXPEDITEUR") {
-    return [
+    return withMessages(base, [
       { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
       {
         href: `${base}/parcels`,
@@ -109,11 +132,11 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
       { href: `${base}/adresses`, label: "Adresses", icon: MapPin },
       { href: `${base}/analytics`, label: "Rapports", icon: BarChart3 },
       { href: `${base}/settings`, label: "Paramètres", icon: Settings },
-    ];
+    ]);
   }
 
   if (role === "SUPPORT") {
-    return [
+    return withMessages(base, [
       { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
       {
         href: `${base}/retours`,
@@ -128,11 +151,11 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
         mobilePrimary: true,
       },
       { href: `${base}/settings`, label: "Paramètres", icon: Settings },
-    ];
+    ]);
   }
 
   if (role === "PICKUP") {
-    return [
+    return withMessages(base, [
       { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
       {
         href: `${base}/parcels`,
@@ -147,11 +170,11 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
         mobilePrimary: true,
       },
       { href: `${base}/settings`, label: "Paramètres", icon: Settings },
-    ];
+    ]);
   }
 
   if (role === "MAGASINIER") {
-    return [
+    return withMessages(base, [
       { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
       {
         href: `${base}/parcels`,
@@ -172,11 +195,11 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
         mobilePrimary: true,
       },
       { href: `${base}/settings`, label: "Paramètres", icon: Settings },
-    ];
+    ]);
   }
 
   if (role === "CHEF_AGENCE") {
-    return [
+    return withMessages(base, [
       { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
       {
         href: `${base}/parcels`,
@@ -198,10 +221,9 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
       },
       { href: `${base}/analytics`, label: "Rapports", icon: BarChart3 },
       { href: `${base}/settings`, label: "Paramètres", icon: Settings },
-    ];
+    ]);
   }
 
-  // ADMIN + SUPER_ADMIN
   const items: PortalNavDef[] = [
     { href: base, label: "Accueil", icon: Home, mobilePrimary: true },
     {
@@ -235,6 +257,11 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
       icon: Building2,
     });
     items.push({
+      href: `${base}/routes`,
+      label: "Auto lieux",
+      icon: Route,
+    });
+    items.push({
       href: `${base}/categories`,
       label: "Catégories",
       icon: Palette,
@@ -242,7 +269,7 @@ export function portalNavFor(role: AppRole): PortalNavDef[] {
   }
 
   items.push({ href: `${base}/settings`, label: "Paramètres", icon: Settings });
-  return items;
+  return withMessages(base, items);
 }
 
 export function portalSidebarLinks(role: AppRole): PortalNavDef[] {

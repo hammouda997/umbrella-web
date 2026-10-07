@@ -2,11 +2,19 @@ import type { AuthSession, StatusCard } from "@/lib/api";
 import type {
   AppNotification,
   CodPayload,
+  DeliveryMode,
+  DeliveryRoute,
   PaymentStatus,
   TicketStatus,
   TimelineEntry,
 } from "@/lib/domain";
 import type { Agency } from "@/lib/domain";
+import type {
+  CallSession,
+  ChatMessage,
+  CommsPerson,
+  ConversationSummary,
+} from "@/lib/comms-types";
 import {
   MOCK_AGENCIES,
   MOCK_PARCELS,
@@ -33,15 +41,44 @@ import {
   type StatusCategory,
   type StatusCategoryIcon,
 } from "@/lib/status-categories";
-import { STATUS_META } from "@/lib/status-meta";
+import { STATUS_META, TUNISIA_GOVERNORATES } from "@/lib/status-meta";
 
 /**
  * Browser-persisted demo backend. Mirrors the NestJS API contract (routes, scoping, rules)
  * so the UI behaves the same with NEXT_PUBLIC_USE_MOCK=true or against umbrella/api.
  */
 
-const STORAGE_KEY = "umbrella.mock-db.v4";
+const STORAGE_KEY = "umbrella.mock-db.v10";
 export const MOCK_RESET_EVENT = "umbrella:mock-db-reset";
+
+type MockConversation = {
+  id: number;
+  parcelId: number | null;
+  participantIds: number[];
+  lastReadAt: Record<number, string | null>;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MockMessage = {
+  id: number;
+  conversationId: number;
+  senderId: number;
+  body: string;
+  createdAt: string;
+};
+
+type MockCall = {
+  id: number;
+  conversationId: number;
+  callerId: number;
+  calleeId: number;
+  status: CallSession["status"];
+  startedAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+};
 
 type MockDb = {
   users: MockUser[];
@@ -51,6 +88,10 @@ type MockDb = {
   zones: MockZone[];
   agencies: Agency[];
   statusCategories: StatusCategory[];
+  deliveryRoutes: DeliveryRoute[];
+  conversations: MockConversation[];
+  messages: MockMessage[];
+  calls: MockCall[];
 };
 
 type Actor = {
@@ -66,6 +107,7 @@ export class MockHttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "MockHttpError";
@@ -75,6 +117,7 @@ export class MockHttpError extends Error {
 const STAFF: AppRole[] = ["SUPER_ADMIN", "ADMIN"];
 const OPS_STAFF: AppRole[] = ["SUPER_ADMIN", "ADMIN", "CHEF_AGENCE"];
 const RETURN_STATUSES_LIST = [
+  "LIVRAISON_ANNULEE",
   "RETOUR_DEPOT",
   "RETOUR_DEFINITIF",
   "RETOUR_INTER_AGENCE",
@@ -95,21 +138,25 @@ const DELIVERY_WINDOWS = ["matin", "apres-midi", "soir", "journee"];
 
 export const EVENT_LABEL: Record<string, string> = {
   NON_SERIEUX: "Non sérieux",
-  EN_ATTENTE: "En attente",
-  A_ENLEVER: "À enlever",
-  ENLEVES: "Enlevé",
-  AU_DEPOT: "Au dépôt",
-  RETOUR_DEPOT: "Retour dépôt",
+  EN_ATTENTE: "En attente de collecte",
+  A_ENLEVER: "En attente de collecte",
+  ENLEVES: "Colis récupéré",
+  AU_DEPOT: "Arrivé au dépôt",
+  EXPEDIE_DESTINATION: "Expédié vers le dépôt de destination",
+  ARRIVE_DESTINATION: "Arrivé au dépôt de destination",
+  AFFECTE_LIVREUR: "Affecté à un livreur",
+  RETOUR_DEPOT: "Retour en agence",
   EN_COURS: "En cours de livraison",
   A_VERIFIER: "À vérifier",
   LIVRES: "Livré",
   LIVRES_PAYES: "Livré payé",
   ECHANGES: "Échange",
   REMBOURSES: "Remboursé",
+  LIVRAISON_ANNULEE: "Livraison annulée",
   RETOUR_DEFINITIF: "Retour définitif",
   RETOUR_INTER_AGENCE: "Retour inter-agence",
-  RETOUR_EXPEDITEURS: "Retour expéditeur",
-  RETOUR_RECU: "Retour reçu",
+  RETOUR_EXPEDITEURS: "En transit vers l’expéditeur",
+  RETOUR_RECU: "Retour livré à l’expéditeur",
   SAISIE_DOUANE: "Saisie par la douane",
   SUPPRIME: "Supprimé",
 };
@@ -125,6 +172,26 @@ function seedStatusCategories(): StatusCategory[] {
     icon: row.icon,
     sortOrder: row.sortOrder,
     isActive: true,
+  }));
+}
+
+const INTERNAL_ROUTE_GOVS = new Set([
+  "Tunis",
+  "Ariana",
+  "Ben Arous",
+  "La Mannouba",
+]);
+
+function seedDeliveryRoutes(): DeliveryRoute[] {
+  const at = new Date().toISOString();
+  return TUNISIA_GOVERNORATES.map((governorate, index) => ({
+    id: index + 1,
+    governorate,
+    mode: (INTERNAL_ROUTE_GOVS.has(governorate)
+      ? "INTERNAL"
+      : "EXTERNAL") as DeliveryMode,
+    createdAt: at,
+    updatedAt: at,
   }));
 }
 
@@ -146,6 +213,10 @@ function seedDb(): MockDb {
     zones: MOCK_ZONES,
     agencies,
     statusCategories: seedStatusCategories(),
+    deliveryRoutes: seedDeliveryRoutes(),
+    conversations: [],
+    messages: [],
+    calls: [],
   });
 }
 
@@ -162,6 +233,12 @@ function isMockDb(value: unknown): value is MockDb {
   if (!Array.isArray(v.agencies)) {
     v.agencies = structuredClone(MOCK_AGENCIES);
   }
+  if (!Array.isArray(v.deliveryRoutes)) {
+    v.deliveryRoutes = seedDeliveryRoutes();
+  }
+  if (!Array.isArray(v.conversations)) v.conversations = [];
+  if (!Array.isArray(v.messages)) v.messages = [];
+  if (!Array.isArray(v.calls)) v.calls = [];
   const agencies = v.agencies as Agency[];
   const agencyByGov = new Map(
     agencies.map((a) => [a.governorate.toLowerCase(), a.id] as const),
@@ -169,6 +246,12 @@ function isMockDb(value: unknown): value is MockDb {
   for (const p of v.parcels as MockParcel[]) {
     if (p.agencyId == null && p.governorate) {
       p.agencyId = agencyByGov.get(p.governorate.toLowerCase()) ?? null;
+    }
+  }
+  const users = v.users as MockUser[];
+  for (const seed of MOCK_USERS) {
+    if (!users.some((u) => u.email.toLowerCase() === seed.email.toLowerCase())) {
+      users.push({ ...seed, createdAt: seed.createdAt ?? nowIso() });
     }
   }
   return true;
@@ -231,6 +314,14 @@ function agencyRef(agencyId?: number | null) {
     : null;
 }
 
+function zoneRef(zoneId?: number | null) {
+  if (!zoneId) return null;
+  const zone = db().zones.find((z) => z.id === zoneId);
+  return zone
+    ? { id: zone.id, name: zone.name, governorate: zone.governorate }
+    : null;
+}
+
 function publicUser(u: MockUser) {
   return {
     id: u.id,
@@ -240,9 +331,43 @@ function publicUser(u: MockUser) {
     role: u.role,
     agencyId: u.agencyId ?? null,
     agency: agencyRef(u.agencyId),
+    zoneId: u.zoneId ?? null,
+    homeZone: zoneRef(u.zoneId),
+    approvalStatus: u.approvalStatus ?? "APPROVED",
+    approvedAt: null as string | null,
+    governorate: u.governorate ?? null,
+    city: u.city ?? null,
+    address: u.address ?? null,
+    shopName: u.shopName ?? null,
+    productTypes: u.productTypes ?? [],
+    productNotes: u.productNotes ?? null,
     isActive: u.isActive,
     createdAt: u.createdAt ?? nowIso(),
   };
+}
+
+function ensureZoneForGovernorate(governorate: string): number {
+  const name = governorate.trim();
+  if (!name) throw new MockHttpError(400, "Gouvernorat requis");
+  const store = db();
+  const existing = store.zones.find(
+    (z) =>
+      z.isActive &&
+      z.governorate &&
+      z.governorate.localeCompare(name, "fr", { sensitivity: "base" }) === 0,
+  );
+  if (existing) return existing.id;
+  const zone: MockZone = {
+    id: nextId(store.zones),
+    name: `Zone ${name}`,
+    governorate: name,
+    centerLat: null,
+    centerLng: null,
+    radiusKm: 20,
+    isActive: true,
+  };
+  store.zones.push(zone);
+  return zone.id;
 }
 
 function sessionFor(user: MockUser): AuthSession {
@@ -358,8 +483,9 @@ function enrichParcel(parcel: MockParcel): MockParcel {
 function scopeParcels(actor: Actor): MockParcel[] {
   const live = db().parcels.filter((p) => p.status !== "SUPPRIME");
   let list: MockParcel[];
-  if (isStaff(actor)) list = live;
-  else if (AGENCY_ROLES.includes(actor.role)) {
+  if (isStaff(actor) || actor.role === "MAGASINIER" || actor.role === "PICKUP") {
+    list = live;
+  } else if (AGENCY_ROLES.includes(actor.role)) {
     const agencyId = actor.agencyId;
     if (!agencyId) return [];
     const scoped = live.filter((p) => p.agencyId === agencyId);
@@ -497,6 +623,152 @@ function applyParcelFields(target: MockParcel, dto: Record<string, unknown>) {
   }
 }
 
+function resolveDeliveryMode(governorate: string): DeliveryMode {
+  const hit = db().deliveryRoutes.find(
+    (r) =>
+      r.governorate.localeCompare(governorate.trim(), "fr", {
+        sensitivity: "base",
+      }) === 0,
+  );
+  return hit?.mode ?? "EXTERNAL";
+}
+
+function upsertDeliveryRoute(governorate: string, mode: DeliveryMode): DeliveryRoute {
+  const store = db();
+  const trimmed = governorate.trim();
+  const at = nowIso();
+  const existing = store.deliveryRoutes.find(
+    (r) =>
+      r.governorate.localeCompare(trimmed, "fr", { sensitivity: "base" }) === 0,
+  );
+  if (existing) {
+    existing.mode = mode;
+    existing.updatedAt = at;
+    commit();
+    return existing;
+  }
+  const row: DeliveryRoute = {
+    id: nextId(store.deliveryRoutes),
+    governorate: trimmed,
+    mode,
+    createdAt: at,
+    updatedAt: at,
+  };
+  store.deliveryRoutes.push(row);
+  commit();
+  return row;
+}
+
+function switchParcelMode(
+  actor: Actor,
+  id: number,
+  mode: DeliveryMode,
+): MockParcel {
+  if (!SENDERS.includes(actor.role)) {
+    throw new MockHttpError(403, "Cannot change delivery mode");
+  }
+  const parcel = ownedOrStaff(actor, id);
+  if (parcel.status === "SUPPRIME") {
+    throw new MockHttpError(400, "Parcel already deleted");
+  }
+  if (parcel.mode === mode) return enrichParcel(parcel);
+  if (actor.role === "EXPEDITEUR" && !SENDER_EDITABLE.includes(parcel.status)) {
+    throw new MockHttpError(
+      403,
+      "Expéditeur: mode change only while parcel is pending",
+    );
+  }
+  const raw = db().parcels.find((p) => p.id === parcel.id)!;
+  if (mode === "EXTERNAL") {
+    raw.mode = "EXTERNAL";
+    raw.driverId = null;
+    raw.driver = null;
+    if (!raw.code?.startsWith("UMB-EXT")) {
+      raw.code = generateCode("UMB-EXT");
+    }
+    pushEvent(raw, "Basculé vers Navex (EXTERNAL)", { actor });
+  } else {
+    raw.mode = "INTERNAL";
+    raw.bordereauUrl = null;
+    pushEvent(raw, "Basculé vers Umbrella (INTERNAL)", { actor });
+  }
+  commit();
+  return findScopedParcel(actor, raw.id);
+}
+
+function asCommsPerson(u: MockUser): CommsPerson {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    phone: u.phone,
+  };
+}
+
+function summarizeConversation(
+  actor: Actor,
+  c: MockConversation,
+): ConversationSummary {
+  const peerId = c.participantIds.find((id) => id !== actor.id) ?? null;
+  const peerUser = peerId
+    ? db().users.find((u) => u.id === peerId)
+    : undefined;
+  const last = [...db().messages]
+    .filter((m) => m.conversationId === c.id)
+    .sort((a, b) => b.id - a.id)[0];
+  const lastRead = c.lastReadAt[actor.id] ?? null;
+  const unread =
+    last &&
+    last.senderId !== actor.id &&
+    (!lastRead || new Date(last.createdAt) > new Date(lastRead))
+      ? 1
+      : 0;
+  const parcel = c.parcelId
+    ? db().parcels.find((p) => p.id === c.parcelId)
+    : null;
+  return {
+    id: c.id,
+    parcelId: c.parcelId,
+    parcel: parcel
+      ? { id: parcel.id, code: parcel.code }
+      : null,
+    peer: peerUser ? asCommsPerson(peerUser) : null,
+    lastMessage: last
+      ? {
+          id: last.id,
+          body: last.body,
+          createdAt: last.createdAt,
+          senderId: last.senderId,
+          sender: asCommsPerson(
+            db().users.find((u) => u.id === last.senderId) ?? peerUser!,
+          ),
+        }
+      : null,
+    lastMessageAt: c.lastMessageAt,
+    unread,
+    updatedAt: c.updatedAt,
+  };
+}
+
+function assertConversationParticipant(actor: Actor, conversationId: number) {
+  const c = db().conversations.find((x) => x.id === conversationId);
+  if (!c || !c.participantIds.includes(actor.id)) {
+    throw new MockHttpError(403, "Not a conversation participant");
+  }
+  return c;
+}
+
+function broadcastMock(event: string, payload: unknown, fromUserId: number) {
+  try {
+    const ch = new BroadcastChannel("umbrella-comms");
+    ch.postMessage({ event, payload, fromUserId });
+    ch.close();
+  } catch {
+    /* ignore */
+  }
+}
+
 function createParcel(actor: Actor, dto: Record<string, unknown>) {
   const recipientName = str(dto.recipientName);
   const phone = str(dto.phone);
@@ -506,7 +778,10 @@ function createParcel(actor: Actor, dto: Record<string, unknown>) {
   if (!recipientName || recipientName.length < 2 || !phone || !governorate || !city || !address) {
     throw new MockHttpError(400, "Champs obligatoires manquants");
   }
-  const mode = dto.mode === "INTERNAL" ? "INTERNAL" : "EXTERNAL";
+  const mode: DeliveryMode =
+    dto.mode === "INTERNAL" || dto.mode === "EXTERNAL"
+      ? dto.mode
+      : resolveDeliveryMode(governorate);
   const at = nowIso();
   const price = num(dto.price);
   if (price === undefined || price < 0) throw new MockHttpError(400, "Prix invalide");
@@ -536,6 +811,7 @@ function createParcel(actor: Actor, dto: Record<string, unknown>) {
     timeline: [],
   };
   applyParcelFields(parcel, dto);
+  parcel.mode = mode;
   parcel.tryProduct = bool(dto.tryProduct) ?? bool(dto.allowOpen) ?? false;
   if (!parcel.agencyId) parcel.agencyId = agencyIdForGov(parcel.governorate);
   pushEvent(parcel, "Colis créé", { status: "EN_ATTENTE", actor });
@@ -766,15 +1042,25 @@ function updatePaymentStatus(actor: Actor, id: number, dto: Record<string, unkno
 }
 
 function zonesFor(actor: Actor) {
-  const counts = new Map<number, number>();
+  const parcelCounts = new Map<number, number>();
   for (const p of db().parcels) {
     if (p.zone?.id && p.status !== "SUPPRIME") {
-      counts.set(p.zone.id, (counts.get(p.zone.id) ?? 0) + 1);
+      parcelCounts.set(p.zone.id, (parcelCounts.get(p.zone.id) ?? 0) + 1);
+    }
+  }
+  const livreurCounts = new Map<number, number>();
+  for (const u of db().users) {
+    if (u.role === "LIVREUR" && u.zoneId) {
+      livreurCounts.set(u.zoneId, (livreurCounts.get(u.zoneId) ?? 0) + 1);
     }
   }
   return db()
     .zones.filter((z) => isStaff(actor) || z.isActive)
-    .map((z) => ({ ...z, parcelCount: counts.get(z.id) ?? 0 }))
+    .map((z) => ({
+      ...z,
+      parcelCount: parcelCounts.get(z.id) ?? 0,
+      livreurCount: livreurCounts.get(z.id) ?? 0,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "fr"));
 }
 
@@ -870,11 +1156,30 @@ function createUser(actor: Actor, dto: Record<string, unknown>) {
     password,
     isActive: true,
     agencyId,
+    approvalStatus: "APPROVED",
     createdAt: nowIso(),
   };
   db().users.push(user);
   commit();
   return publicUser(user);
+}
+
+function setUserApproval(actor: Actor, id: number, dto: Record<string, unknown>) {
+  if (actor.role !== "SUPER_ADMIN" && actor.role !== "ADMIN") {
+    throw new MockHttpError(403, "Accès refusé");
+  }
+  const target = db().users.find((u) => u.id === id);
+  if (!target) throw new MockHttpError(404, "Utilisateur introuvable");
+  if (target.id === actor.id) {
+    throw new MockHttpError(400, "Impossible de modifier votre propre statut d'approbation");
+  }
+  const status = dto.status;
+  if (status !== "APPROVED" && status !== "REJECTED") {
+    throw new MockHttpError(400, "Statut d'approbation invalide");
+  }
+  target.approvalStatus = status;
+  commit();
+  return publicUser(target);
 }
 
 function setUserActive(actor: Actor, id: number, dto: Record<string, unknown>) {
@@ -1087,39 +1392,112 @@ function notificationsFor(actor: Actor): AppNotification[] {
     .slice(0, 15);
 }
 
+const PENDING_MESSAGE =
+  "Votre compte est en cours de vérification. Patientez jusqu’à l’approbation de notre équipe.";
+const REJECTED_MESSAGE = "Compte refusé — contactez le support Umbrella Express.";
+
 export function mockSignIn(email: string, password: string): AuthSession {
   const user = db().users.find(
     (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password,
   );
   if (!user) throw new MockHttpError(401, "Identifiants invalides");
   if (!user.isActive) throw new MockHttpError(401, "Compte désactivé — contactez le support");
+  const approval = user.approvalStatus ?? "APPROVED";
+  if (approval === "PENDING") {
+    throw new MockHttpError(403, PENDING_MESSAGE, "ACCOUNT_PENDING");
+  }
+  if (approval === "REJECTED") {
+    throw new MockHttpError(403, REJECTED_MESSAGE, "ACCOUNT_REJECTED");
+  }
   return sessionFor(user);
 }
 
-export function mockSignUp(dto: Record<string, unknown>): AuthSession {
+export function mockSignUp(dto: Record<string, unknown>) {
   const email = str(dto.email)?.toLowerCase();
   const name = str(dto.name);
   const password = typeof dto.password === "string" ? dto.password : "";
+  const phone = str(dto.phone) ?? "";
+  const governorate = str(dto.governorate) ?? "";
+  const city = str(dto.city) ?? "";
+  const address = str(dto.address) ?? "";
   if (!email || !name) throw new MockHttpError(400, "Nom et email requis");
+  if (name.length < 2 || name.length > 80) throw new MockHttpError(400, "Nom invalide");
   if (password.length < 8) throw new MockHttpError(400, "Mot de passe : 8 caractères minimum");
+  if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(password)) {
+    throw new MockHttpError(400, "Mot de passe : au moins une lettre et un chiffre");
+  }
+  if (!/^[0-9]{8}$/.test(phone)) throw new MockHttpError(400, "Téléphone : 8 chiffres");
+  if (!governorate || !city || address.length < 3) {
+    throw new MockHttpError(400, "Adresse incomplète");
+  }
+  if (city.length > 80 || address.length > 200) {
+    throw new MockHttpError(400, "Adresse invalide");
+  }
   if (db().users.some((u) => u.email.toLowerCase() === email)) {
     throw new MockHttpError(409, "Email déjà utilisé");
   }
-  const role: AppRole =
-    dto.role === "LIVREUR" || dto.role === "CLIENT" ? dto.role : "EXPEDITEUR";
+  if (dto.role !== "EXPEDITEUR" && dto.role !== "LIVREUR") {
+    throw new MockHttpError(400, "Inscription publique : Expéditeur ou Livreur uniquement");
+  }
+  const role: AppRole = dto.role;
+
+  let productTypes: string[] = [];
+  let productNotes: string | null = null;
+  let shopName: string | null = null;
+  if (role === "EXPEDITEUR") {
+    const raw = Array.isArray(dto.productTypes) ? dto.productTypes : [];
+    productTypes = raw.map((t) => String(t).trim()).filter(Boolean);
+    if (productTypes.length === 0) {
+      throw new MockHttpError(400, "Choisissez au moins un type de produit");
+    }
+    if (productTypes.includes("Autre")) {
+      const notes = str(dto.productNotes) ?? "";
+      if (notes.length < 2) throw new MockHttpError(400, "Précisez le type de produit");
+      productNotes = notes;
+    } else {
+      productNotes = str(dto.productNotes) || null;
+    }
+    shopName = str(dto.shopName) || name;
+  }
+
+  let zoneId: number | null = null;
+  if (role === "LIVREUR") {
+    zoneId = ensureZoneForGovernorate(governorate);
+  }
+
   const user: MockUser = {
     id: nextId(db().users),
     name,
     email,
     role,
-    phone: str(dto.phone) ?? "",
+    phone,
     password,
     isActive: true,
+    approvalStatus: "PENDING",
+    governorate,
+    city,
+    address,
+    shopName,
+    productTypes,
+    productNotes,
+    zoneId,
     createdAt: nowIso(),
   };
   db().users.push(user);
   commit();
-  return sessionFor(user);
+  return {
+    pending: true as const,
+    message: PENDING_MESSAGE,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      approvalStatus: user.approvalStatus,
+      zoneId: user.zoneId ?? null,
+    },
+  };
 }
 
 export function mockRefresh(refreshToken: string): AuthSession {
@@ -1198,7 +1576,13 @@ const ROUTES: Route[] = [
       if (actor.role === "LIVREUR" && hit.driverId !== actor.id) {
         throw new MockHttpError(403, "Ce colis ne vous est pas assigné");
       }
-      if (AGENCY_ROLES.includes(actor.role) && !inAgency(actor, hit)) {
+      // Depot / pickup scan what is physically present — no agency gate.
+      if (
+        AGENCY_ROLES.includes(actor.role) &&
+        actor.role !== "MAGASINIER" &&
+        actor.role !== "PICKUP" &&
+        !inAgency(actor, hit)
+      ) {
         throw new MockHttpError(403, "Colis hors de votre agence");
       }
       const status = body.status ? String(body.status) : null;
@@ -1220,6 +1604,18 @@ const ROUTES: Route[] = [
           400,
           "Un motif / commentaire est obligatoire pour ce statut",
         );
+      }
+      const driverId = body.driverId != null ? Number(body.driverId) : null;
+      if (
+        (status === "AFFECTE_LIVREUR" || status === "EN_COURS") &&
+        driverId
+      ) {
+        const driver = db().users.find(
+          (u) => u.id === driverId && u.role === "LIVREUR" && u.isActive,
+        );
+        if (!driver) throw new MockHttpError(400, "Livreur introuvable");
+        hit.driverId = driver.id;
+        hit.driver = { id: driver.id, name: driver.name, phone: driver.phone };
       }
       hit.status = status;
       pushEvent(hit, EVENT_LABEL[status] ?? status, {
@@ -1255,6 +1651,16 @@ const ROUTES: Route[] = [
   },
   {
     method: "PATCH",
+    pattern: /^\/parcels\/(\d+)\/mode$/,
+    roles: SENDERS,
+    handler: ({ actor, params, body }) => {
+      const mode = body.mode === "INTERNAL" ? "INTERNAL" : body.mode === "EXTERNAL" ? "EXTERNAL" : null;
+      if (!mode) throw new MockHttpError(400, "mode requis (INTERNAL | EXTERNAL)");
+      return switchParcelMode(actor, Number(params[0]), mode);
+    },
+  },
+  {
+    method: "PATCH",
     pattern: /^\/parcels\/(\d+)$/,
     roles: SENDERS,
     handler: ({ actor, params, body }) => {
@@ -1281,9 +1687,323 @@ const ROUTES: Route[] = [
     },
   },
   {
+    method: "GET",
+    pattern: /^\/delivery-routes$/,
+    roles: SENDERS,
+    handler: () =>
+      [...db().deliveryRoutes].sort((a, b) =>
+        a.governorate.localeCompare(b.governorate, "fr"),
+      ),
+  },
+  {
+    method: "GET",
+    pattern: /^\/delivery-routes\/resolve\/([^/]+)$/,
+    roles: SENDERS,
+    handler: ({ params }) => {
+      const governorate = decodeURIComponent(params[0]);
+      return { governorate, mode: resolveDeliveryMode(governorate) };
+    },
+  },
+  {
+    method: "PUT",
+    pattern: /^\/delivery-routes$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ body }) => {
+      const governorate = str(body.governorate);
+      const mode =
+        body.mode === "INTERNAL"
+          ? "INTERNAL"
+          : body.mode === "EXTERNAL"
+            ? "EXTERNAL"
+            : null;
+      if (!governorate || !mode) {
+        throw new MockHttpError(400, "governorate et mode requis");
+      }
+      return upsertDeliveryRoute(governorate, mode);
+    },
+  },
+  {
+    method: "PUT",
+    pattern: /^\/delivery-routes\/bulk$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ body }) => {
+      const routes = Array.isArray(body.routes) ? body.routes : [];
+      return routes.map((row) => {
+        const r = record(row);
+        const governorate = str(r.governorate);
+        const mode =
+          r.mode === "INTERNAL"
+            ? "INTERNAL"
+            : r.mode === "EXTERNAL"
+              ? "EXTERNAL"
+              : null;
+        if (!governorate || !mode) {
+          throw new MockHttpError(400, "Chaque route nécessite governorate et mode");
+        }
+        return upsertDeliveryRoute(governorate, mode);
+      });
+    },
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/delivery-routes\/([^/]+)$/,
+    roles: ["SUPER_ADMIN"],
+    handler: ({ params }) => {
+      const governorate = decodeURIComponent(params[0]);
+      const store = db();
+      const idx = store.deliveryRoutes.findIndex(
+        (r) =>
+          r.governorate.localeCompare(governorate.trim(), "fr", {
+            sensitivity: "base",
+          }) === 0,
+      );
+      if (idx < 0) throw new MockHttpError(404, "Route introuvable");
+      const [removed] = store.deliveryRoutes.splice(idx, 1);
+      commit();
+      return { deleted: true, governorate: removed.governorate };
+    },
+  },
+  {
+    method: "GET",
+    pattern: /^\/users\/directory$/,
+    roles: ALL,
+    handler: ({ actor, body }) => {
+      const q = (str(body.q) ?? "").toLowerCase().trim();
+      return db()
+        .users.filter((u) => {
+          if (u.id === actor.id || !u.isActive) return false;
+          if ((u.approvalStatus ?? "APPROVED") !== "APPROVED") return false;
+          if (!q) return true;
+          return (
+            u.name.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q) ||
+            (u.phone ?? "").includes(q)
+          );
+        })
+        .map(asCommsPerson)
+        .sort((a, b) => a.name.localeCompare(b.name, "fr"))
+        .slice(0, 40);
+    },
+  },
+  {
+    method: "GET",
+    pattern: /^\/conversations$/,
+    roles: ALL,
+    handler: ({ actor }) =>
+      db()
+        .conversations.filter((c) => c.participantIds.includes(actor.id))
+        .map((c) => summarizeConversation(actor, c))
+        .sort((a, b) => {
+          const at = a.lastMessageAt ?? a.updatedAt;
+          const bt = b.lastMessageAt ?? b.updatedAt;
+          return new Date(bt).getTime() - new Date(at).getTime();
+        }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/conversations$/,
+    roles: ALL,
+    handler: ({ actor, body }) => {
+      const peerUserId = num(body.peerUserId);
+      if (!peerUserId || peerUserId === actor.id) {
+        throw new MockHttpError(400, "peerUserId invalide");
+      }
+      const peer = db().users.find(
+        (u) =>
+          u.id === peerUserId &&
+          u.isActive &&
+          (u.approvalStatus ?? "APPROVED") === "APPROVED",
+      );
+      if (!peer) throw new MockHttpError(404, "User not found");
+      const parcelId = num(body.parcelId) ?? null;
+      const store = db();
+      let existing = store.conversations.find(
+        (c) =>
+          c.participantIds.length === 2 &&
+          c.participantIds.includes(actor.id) &&
+          c.participantIds.includes(peerUserId),
+      );
+      const at = nowIso();
+      if (existing) {
+        if (parcelId && existing.parcelId !== parcelId) {
+          existing.parcelId = parcelId;
+          existing.updatedAt = at;
+          commit();
+        }
+        return summarizeConversation(actor, existing);
+      }
+      existing = {
+        id: nextId(store.conversations),
+        parcelId,
+        participantIds: [actor.id, peerUserId],
+        lastReadAt: { [actor.id]: null, [peerUserId]: null },
+        lastMessageAt: null,
+        createdAt: at,
+        updatedAt: at,
+      };
+      store.conversations.push(existing);
+      commit();
+      return summarizeConversation(actor, existing);
+    },
+  },
+  {
+    method: "GET",
+    pattern: /^\/conversations\/(\d+)\/messages$/,
+    roles: ALL,
+    handler: ({ actor, params }) => {
+      const conversationId = Number(params[0]);
+      const c = assertConversationParticipant(actor, conversationId);
+      const items = [...db().messages]
+        .filter((m) => m.conversationId === conversationId)
+        .sort((a, b) => a.id - b.id)
+        .map((m) => {
+          const sender = db().users.find((u) => u.id === m.senderId)!;
+          return {
+            id: m.id,
+            body: m.body,
+            createdAt: m.createdAt,
+            senderId: m.senderId,
+            sender: asCommsPerson(sender),
+          } satisfies ChatMessage;
+        });
+      c.lastReadAt[actor.id] = nowIso();
+      commit();
+      return { items, nextCursor: null };
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/conversations\/(\d+)\/messages$/,
+    roles: ALL,
+    handler: ({ actor, params, body }) => {
+      const conversationId = Number(params[0]);
+      const c = assertConversationParticipant(actor, conversationId);
+      const text = str(body.body)?.trim();
+      if (!text) throw new MockHttpError(400, "Empty message");
+      const at = nowIso();
+      const msg: MockMessage = {
+        id: nextId(db().messages),
+        conversationId,
+        senderId: actor.id,
+        body: text,
+        createdAt: at,
+      };
+      db().messages.push(msg);
+      c.lastMessageAt = at;
+      c.updatedAt = at;
+      c.lastReadAt[actor.id] = at;
+      commit();
+      const sender = db().users.find((u) => u.id === actor.id)!;
+      const message: ChatMessage = {
+        id: msg.id,
+        body: msg.body,
+        createdAt: msg.createdAt,
+        senderId: msg.senderId,
+        sender: asCommsPerson(sender),
+      };
+      broadcastMock(
+        "message:new",
+        { conversationId, message },
+        actor.id,
+      );
+      return message;
+    },
+  },
+  {
+    method: "GET",
+    pattern: /^\/calls\/turn-credentials$/,
+    roles: ALL,
+    handler: () => ({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+      ],
+      ttl: 0,
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/calls$/,
+    roles: ALL,
+    handler: ({ actor, body }) => {
+      const conversationId = num(body.conversationId);
+      if (!conversationId) throw new MockHttpError(400, "conversationId requis");
+      const c = assertConversationParticipant(actor, conversationId);
+      const calleeId = c.participantIds.find((id) => id !== actor.id);
+      if (!calleeId) throw new MockHttpError(400, "No peer");
+      const at = nowIso();
+      const call: MockCall = {
+        id: nextId(db().calls),
+        conversationId,
+        callerId: actor.id,
+        calleeId,
+        status: "RINGING",
+        startedAt: null,
+        endedAt: null,
+        createdAt: at,
+      };
+      db().calls.push(call);
+      commit();
+      const caller = db().users.find((u) => u.id === actor.id)!;
+      const callee = db().users.find((u) => u.id === calleeId)!;
+      const payload: CallSession = {
+        id: call.id,
+        conversationId,
+        callerId: actor.id,
+        calleeId,
+        status: "RINGING",
+        startedAt: null,
+        endedAt: null,
+        caller: asCommsPerson(caller),
+        callee: asCommsPerson(callee),
+      };
+      broadcastMock("call:ring", payload, actor.id);
+      return payload;
+    },
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/calls\/(\d+)$/,
+    roles: ALL,
+    handler: ({ actor, params, body }) => {
+      const call = db().calls.find((c) => c.id === Number(params[0]));
+      if (!call) throw new MockHttpError(404, "Call not found");
+      if (call.callerId !== actor.id && call.calleeId !== actor.id) {
+        throw new MockHttpError(403, "Not a call participant");
+      }
+      const status = str(body.status) as CallSession["status"] | undefined;
+      if (!status) throw new MockHttpError(400, "status requis");
+      call.status = status;
+      if (status === "ACTIVE" && !call.startedAt) call.startedAt = nowIso();
+      if (
+        status === "ENDED" ||
+        status === "MISSED" ||
+        status === "REJECTED"
+      ) {
+        call.endedAt = nowIso();
+      }
+      commit();
+      const caller = db().users.find((u) => u.id === call.callerId)!;
+      const callee = db().users.find((u) => u.id === call.calleeId)!;
+      const payload: CallSession = {
+        id: call.id,
+        conversationId: call.conversationId,
+        callerId: call.callerId,
+        calleeId: call.calleeId,
+        status: call.status,
+        startedAt: call.startedAt,
+        endedAt: call.endedAt,
+        caller: asCommsPerson(caller),
+        callee: asCommsPerson(callee),
+      };
+      broadcastMock("call:status", payload, actor.id);
+      return payload;
+    },
+  },
+  {
     method: "PATCH",
     pattern: /^\/parcels\/(\d+)\/assign$/,
-    roles: OPS_STAFF,
+    roles: [...OPS_STAFF, "MAGASINIER", "PICKUP"] as AppRole[],
     handler: ({ actor, params, body }) => {
       const parcel = ownedOrStaff(actor, Number(params[0]));
       if (parcel.mode !== "INTERNAL") {
@@ -1294,10 +2014,21 @@ const ROUTES: Route[] = [
       );
       if (!driver) throw new MockHttpError(400, "Livreur introuvable");
       const raw = db().parcels.find((p) => p.id === parcel.id)!;
+      const fromDepot = [
+        "AU_DEPOT",
+        "ARRIVE_DESTINATION",
+        "EXPEDIE_DESTINATION",
+        "RETOUR_DEPOT",
+      ].includes(raw.status);
+      const nextStatus = fromDepot ? "AFFECTE_LIVREUR" : "A_ENLEVER";
+      if (fromDepot) {
+        const gate = canTransition(raw.status, nextStatus, actor.role);
+        if (!gate.ok) throw new MockHttpError(400, gate.reason);
+      }
       raw.driverId = driver.id;
       raw.driver = { id: driver.id, name: driver.name, phone: driver.phone };
-      raw.status = "A_ENLEVER";
-      pushEvent(raw, `Assigné à ${driver.name}`, { status: "A_ENLEVER", actor });
+      raw.status = nextStatus;
+      pushEvent(raw, `Assigné à ${driver.name}`, { status: nextStatus, actor });
       commit();
       return enrichParcel(raw);
     },
@@ -1474,7 +2205,7 @@ const ROUTES: Route[] = [
   {
     method: "POST",
     pattern: /^\/zones$/,
-    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR"],
+    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR"],
     handler: ({ body }) => {
       const zone: MockZone = {
         id: nextId(db().zones),
@@ -1494,7 +2225,7 @@ const ROUTES: Route[] = [
   {
     method: "PATCH",
     pattern: /^\/zones\/(\d+)$/,
-    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR"],
+    roles: ["SUPER_ADMIN", "ADMIN", "EXPEDITEUR", "LIVREUR"],
     handler: ({ params, body }) => {
       const zone = db().zones.find((z) => z.id === Number(params[0]));
       if (!zone) throw new MockHttpError(404, "Zone introuvable");
@@ -1610,11 +2341,11 @@ const ROUTES: Route[] = [
   {
     method: "GET",
     pattern: /^\/users\/livreurs$/,
-    roles: STAFF,
+    roles: PARCEL_OPS,
     handler: () =>
       db()
         .users.filter((u) => u.role === "LIVREUR" && u.isActive)
-        .map((u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone })),
+        .map((u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, zoneId: u.zoneId ?? null })),
   },
   {
     method: "POST",
@@ -1646,6 +2377,12 @@ const ROUTES: Route[] = [
     handler: ({ actor, params, body }) => setUserActive(actor, Number(params[0]), body),
   },
   {
+    method: "PATCH",
+    pattern: /^\/users\/(\d+)\/approval$/,
+    roles: STAFF,
+    handler: ({ actor, params, body }) => setUserApproval(actor, Number(params[0]), body),
+  },
+  {
     method: "GET",
     pattern: /^\/dashboard\/status-counts$/,
     roles: ALL,
@@ -1654,7 +2391,15 @@ const ROUTES: Route[] = [
   {
     method: "GET",
     pattern: /^\/dashboard\/analytics$/,
-    roles: ["SUPER_ADMIN", "ADMIN", "CHEF_AGENCE", "EXPEDITEUR"],
+    roles: [
+      "SUPER_ADMIN",
+      "ADMIN",
+      "CHEF_AGENCE",
+      "SUPPORT",
+      "PICKUP",
+      "MAGASINIER",
+      "EXPEDITEUR",
+    ],
     handler: ({ actor }) => analytics(actor),
   },
   { method: "GET", pattern: /^\/cod$/, roles: STAFF, handler: () => codPayload() },
@@ -1685,8 +2430,14 @@ export function mockHandle(
   body: unknown,
   token?: string,
 ): unknown {
-  const clean = path.split("?")[0];
+  const [clean, qs] = path.split("?");
   const payload = record(body);
+  if (qs) {
+    const params = new URLSearchParams(qs);
+    params.forEach((v, k) => {
+      if (payload[k] === undefined) payload[k] = v;
+    });
+  }
 
   if (method === "GET" && clean.startsWith("/parcels/track/")) {
     return trackParcel(decodeURIComponent(clean.replace("/parcels/track/", "")));
@@ -1699,6 +2450,19 @@ export function mockHandle(
     return mockRefresh(String(payload.refreshToken ?? ""));
   }
   if (method === "POST" && clean === "/auth/logout") return undefined;
+  if (method === "POST" && clean === "/auth/forgot-password") {
+    return {
+      ok: true,
+      message:
+        "Si un compte existe pour cet email, un lien de réinitialisation sera envoyé lorsque l’envoi d’emails sera configuré.",
+    };
+  }
+  if (method === "POST" && clean === "/public/contact") {
+    return {
+      ok: true,
+      message: "Demande reçue — nous vous recontactons bientôt.",
+    };
+  }
 
   for (const route of ROUTES) {
     if (route.method !== method) continue;

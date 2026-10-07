@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { apiFetch } from "@/lib/api";
 
 const INTERESTS = [
   "Pickup",
@@ -14,6 +15,8 @@ const INTERESTS = [
 
 export function LandingContact() {
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
@@ -27,10 +30,29 @@ export function LandingContact() {
     );
   }
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !phone.trim()) return;
-    setSent(true);
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch("/public/contact", {
+        method: "POST",
+        body: JSON.stringify({
+          name: name.trim(),
+          company: company.trim() || undefined,
+          email: email.trim(),
+          phone: phone.trim(),
+          message: message.trim() || undefined,
+          interests,
+        }),
+      });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Envoi impossible");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -92,7 +114,7 @@ export function LandingContact() {
             </div>
           ) : (
             <form
-              onSubmit={onSubmit}
+              onSubmit={(e) => void onSubmit(e)}
               className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-3.5"
             >
               <div className="grid gap-3 sm:grid-cols-2 sm:gap-3.5">
@@ -171,11 +193,16 @@ export function LandingContact() {
                 />
               </div>
 
+              {error ? (
+                <p className="text-[12px] text-[#991211]">{error}</p>
+              ) : null}
+
               <button
                 type="submit"
-                className="magnet mt-auto w-full shrink-0 rounded-full bg-[#991211] py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#7a0e0e] sm:w-auto sm:px-9"
+                disabled={busy}
+                className="magnet mt-auto w-full shrink-0 rounded-full bg-[#991211] py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#7a0e0e] disabled:opacity-60 sm:w-auto sm:px-9"
               >
-                Envoyer
+                {busy ? "Envoi…" : "Envoyer"}
               </button>
             </form>
           )}

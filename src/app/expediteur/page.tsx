@@ -14,6 +14,6 @@ const AdminNavexDashboard = dynamic(
   },
 );
 
-export default function ExpediteurPage() {
-  return <AdminNavexDashboard basePath="/expediteur" variant="sender" />;
+export default function ExpediteurDashboardPage() {
+  return <AdminNavexDashboard basePath="/expediteur" role="EXPEDITEUR" />;
 }

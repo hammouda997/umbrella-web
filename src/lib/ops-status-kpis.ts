@@ -42,6 +42,9 @@ const TONE_BY_KEY: Partial<Record<string, OpsKpiTone>> = {
   A_ENLEVER: "pink",
   ENLEVES: "violet",
   AU_DEPOT: "sky",
+  EXPEDIE_DESTINATION: "blue",
+  ARRIVE_DESTINATION: "sky",
+  AFFECTE_LIVREUR: "violet",
   RETOUR_DEPOT: "orange",
   EN_COURS: "blue",
   A_VERIFIER: "pink",
@@ -49,6 +52,7 @@ const TONE_BY_KEY: Partial<Record<string, OpsKpiTone>> = {
   LIVRES_PAYES: "teal",
   ECHANGES: "gold",
   REMBOURSES: "amber",
+  LIVRAISON_ANNULEE: "rose",
   RETOUR_DEFINITIF: "orange",
   RETOUR_INTER_AGENCE: "amber",
   RETOUR_EXPEDITEURS: "gold",
@@ -74,6 +78,7 @@ export function buildOpsStatusKpis({
   totalLabel,
   totalCount,
   categories,
+  statusKeysFilter,
 }: {
   basePath: string;
   countsByStatus: Map<string, number> | Record<string, number>;
@@ -81,13 +86,20 @@ export function buildOpsStatusKpis({
   /** When set, Total card uses this (e.g. all parcels) instead of sum of status keys. */
   totalCount?: number;
   categories?: StatusCategory[] | null;
+  /** When set, only Total + these status keys are shown. */
+  statusKeysFilter?: string[] | null;
 }): OpsKpi[] {
   const get = (key: string) => {
     if (countsByStatus instanceof Map) return countsByStatus.get(key) ?? 0;
     return countsByStatus[key] ?? 0;
   };
 
-  const active = categoryList(categories);
+  const filter = statusKeysFilter?.length
+    ? new Set(statusKeysFilter)
+    : null;
+  const active = categoryList(categories).filter(
+    (c) => c.key === TOTAL_CATEGORY_KEY || !filter || filter.has(c.key),
+  );
   const statusKeys = active
     .map((c) => c.key)
     .filter((key) => key !== TOTAL_CATEGORY_KEY);

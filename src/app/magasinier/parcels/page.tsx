@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Suspense } from "react";
 import { ParcelsManager } from "@/components/ParcelsManager";
@@ -6,12 +6,10 @@ import { ParcelsManager } from "@/components/ParcelsManager";
 function Body() {
   return (
     <ParcelsManager
-      title={"Colis"}
-      description={"Colis de votre agence"}
-      detailBasePath={"/magasinier/parcels"}
-      
-      
-      
+      title="Colis"
+      description="Colis de votre agence"
+      detailBasePath="/magasinier/parcels"
+      showPartyDetails
     />
   );
 }

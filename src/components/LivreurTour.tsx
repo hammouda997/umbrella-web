@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { MapPin, RefreshCw, Route } from "lucide-react";
+import { MapPin, Phone, RefreshCw, Route } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
@@ -97,7 +97,7 @@ export function LivreurTour() {
 
   function demandTour() {
     if (active.length === 0) {
-      setMessage("Aucun colis actif ├á organiser");
+      setMessage("Aucun colis actif à organiser");
       return;
     }
     setGenerating(true);
@@ -106,7 +106,7 @@ export function LivreurTour() {
       setTourActive(true);
       const planned = buildTourByPlaces(active);
       setMessage(
-        `­ƒù║´©Å Tourn├®e pr├¬te ┬À ${planned.length} lieu(x) ┬À ${active.length} stop(s)`,
+        `Tournée prête · ${planned.length} lieu(x) · ${active.length} stop(s)`,
       );
       setGenerating(false);
     }, 450);
@@ -114,7 +114,7 @@ export function LivreurTour() {
 
   function clearTour() {
     setTourActive(false);
-    setMessage("Tourn├®e r├®initialis├®e ÔÇö liste simple");
+    setMessage("Tournée réinitialisée — liste simple");
   }
 
   async function applyStatus(
@@ -135,7 +135,7 @@ export function LivreurTour() {
           actor: "LIVREUR",
         }),
       });
-      setMessage("Statut mis ├á jour");
+      setMessage("Statut mis à jour");
       setPending(null);
       setComment("");
       await load();
@@ -191,7 +191,7 @@ export function LivreurTour() {
             </h2>
             <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-muted">
               <MapPin className="h-3.5 w-3.5" />
-              {p.city} ┬À {p.governorate}
+              {p.city} · {p.governorate}
             </p>
           </div>
           <span
@@ -215,7 +215,7 @@ export function LivreurTour() {
             href={`tel:${p.phone}`}
             className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
           >
-            <span aria-hidden>­ƒô×</span>
+            <Phone className="h-4 w-4" aria-hidden />
             Appeler
           </a>
           <a
@@ -226,7 +226,7 @@ export function LivreurTour() {
             rel="noreferrer"
             className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-cream py-2.5 text-sm font-semibold text-ink"
           >
-            <span aria-hidden>­ƒù║´©Å</span>
+            <MapPin className="h-4 w-4" aria-hidden />
             GPS
           </a>
         </div>
@@ -252,8 +252,8 @@ export function LivreurTour() {
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-10">
       <PageHeader
-        title="Ma tourn├®e"
-        description="Demandez une tourn├®e intelligente group├®e par lieux"
+        title="Ma tournée"
+        description="Demandez une tournée intelligente groupée par lieux"
         actions={
           <button
             type="button"
@@ -266,7 +266,7 @@ export function LivreurTour() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-cream px-3 py-2 text-sm font-semibold text-ink"
           >
             <RefreshCw className="h-4 w-4" />
-            Rafra├«chir
+            Rafraîchir
           </button>
         }
       />
@@ -274,11 +274,11 @@ export function LivreurTour() {
       <Panel className="space-y-3">
         <div className="flex items-start gap-3">
           <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand/10 text-xl">
-            ­ƒøÁ
+            🛵
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-display text-lg font-bold text-ink">
-              Tourn├®e intelligente
+              Tournée intelligente
             </p>
             <p className="text-sm text-ink-muted">
               Regroupe vos colis par ville / gouvernorat et propose un ordre de
@@ -294,7 +294,7 @@ export function LivreurTour() {
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-soft disabled:opacity-50"
           >
             <Route className="h-4 w-4" />
-            {generating ? "OrganisationÔÇª" : "Demander une tourn├®e"}
+            {generating ? "Organisation…" : "Demander une tournée"}
           </button>
           {tourActive ? (
             <button
@@ -313,8 +313,8 @@ export function LivreurTour() {
             rel="noreferrer"
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cream bg-cream-soft/50 px-4 py-2.5 text-sm font-semibold text-ink"
           >
-            <span aria-hidden>­ƒù║´©Å</span>
-            Ouvrir l&apos;itin├®raire GPS ({orderedStops.length} stops)
+            <MapPin className="h-4 w-4" aria-hidden />
+            Ouvrir l&apos;itinéraire GPS ({orderedStops.length} stops)
           </a>
         ) : null}
       </Panel>
@@ -322,8 +322,8 @@ export function LivreurTour() {
       <div className="grid grid-cols-3 gap-2">
         {[
           ["Actifs", active.length],
-          ["Lieux", tourActive ? places.length : "ÔÇö"],
-          ["Livr├®s", done.length],
+          ["Lieux", tourActive ? places.length : "—"],
+          ["Livrés", done.length],
         ].map(([label, n]) => (
           <Panel key={String(label)} className="py-3 text-center">
             <p className="font-display text-xl font-bold text-ink">{n}</p>
@@ -340,12 +340,12 @@ export function LivreurTour() {
         </p>
       ) : null}
 
-      {loading ? <LoadingBlock rows={3} label="Chargement tourn├®eÔÇª" /> : null}
+      {loading ? <LoadingBlock rows={3} label="Chargement tournée…" /> : null}
 
       {!loading && active.length === 0 ? (
         <EmptyState
-          title="Aucune tourn├®e active"
-          description="Les colis livr├®s ou cl├┤tur├®s apparaissent dans la liste compl├¿te."
+          title="Aucune tournée active"
+          description="Les colis livrés ou clôturés apparaissent dans la liste complète."
           action={
             <Link
               href="/livreur/parcels"
@@ -370,7 +370,7 @@ export function LivreurTour() {
                     {placeIndex + 1}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">­ƒôì {place.placeLabel}</p>
+                    <p className="font-semibold">📍 {place.placeLabel}</p>
                     <p className="text-xs text-white/80">
                       {place.stops.length} stop
                       {place.stops.length > 1 ? "s" : ""}
@@ -411,7 +411,7 @@ export function LivreurTour() {
               {pending.action.label}
             </p>
             <p className="mt-1 text-sm text-ink-muted">
-              {pending.parcel.code} ┬À {pending.parcel.recipientName}
+              {pending.parcel.code} · {pending.parcel.recipientName}
             </p>
             <label className="mt-4 block text-sm font-medium text-ink">
               {pending.action.commentLabel ?? "Commentaire"}
@@ -421,7 +421,7 @@ export function LivreurTour() {
                 rows={3}
                 required
                 className="mt-1.5 w-full rounded-xl border border-cream px-3 py-2.5 text-sm outline-none ring-brand focus:ring-2"
-                placeholder="Ex. report demain 10h, num├®ro erron├®ÔÇª"
+                placeholder="Ex. report demain 10h, numéro erroné…"
               />
             </label>
             <div className="mt-4 flex gap-2">
@@ -451,7 +451,7 @@ export function LivreurTour() {
         href="/livreur/parcels"
         className="block text-center text-sm font-semibold text-brand"
       >
-        Liste compl├¿te (table) ÔåÆ
+        Liste complète (table) →
       </Link>
     </div>
   );

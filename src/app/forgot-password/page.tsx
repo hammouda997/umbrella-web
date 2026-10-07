@@ -4,15 +4,30 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { MailCheck, Send } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
+import { errorText, useToast } from "@/components/Feedback";
 import { Button, TextField, buttonClass } from "@/components/ui";
+import { apiFetch } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
+  const toast = useToast();
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const email = String(new FormData(e.currentTarget).get("email") ?? "").trim();
-    setSentTo(email);
+    setBusy(true);
+    try {
+      await apiFetch("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setSentTo(email);
+    } catch (err) {
+      toast.error("Envoi impossible", errorText(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -41,9 +56,9 @@ export default function ForgotPasswordPage() {
           </Link>
         </div>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
           <TextField name="email" type="email" label="Email" autoComplete="email" required />
-          <Button type="submit" icon={Send} className="w-full">
+          <Button type="submit" icon={Send} className="w-full" loading={busy}>
             Envoyer le lien
           </Button>
         </form>

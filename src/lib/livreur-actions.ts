@@ -70,21 +70,34 @@ export function livreurActionsFor(status: string): LivreurAction[] {
         },
       ];
     case "ENLEVES":
+      return [
+        {
+          id: "depot",
+          label: "Arrivé au dépôt",
+          emoji: "🏭",
+          status: "AU_DEPOT",
+          tone: "primary",
+        },
+      ];
     case "AU_DEPOT":
+    case "ARRIVE_DESTINATION":
+      return [
+        {
+          id: "assign",
+          label: "Affecté à un livreur",
+          emoji: "👤",
+          status: "AFFECTE_LIVREUR",
+          tone: "primary",
+        },
+      ];
+    case "AFFECTE_LIVREUR":
       return [
         {
           id: "out",
-          label: "En livraison",
+          label: "En cours de livraison",
           emoji: "🛵",
           status: "EN_COURS",
           tone: "primary",
-        },
-        {
-          id: "depot",
-          label: "Au dépôt",
-          emoji: "🏭",
-          status: "AU_DEPOT",
-          tone: "neutral",
         },
       ];
     case "EN_COURS":
@@ -96,6 +109,15 @@ export function livreurActionsFor(status: string): LivreurAction[] {
           emoji: "✅",
           status: "LIVRES",
           tone: "success",
+        },
+        {
+          id: "cancel-delivery",
+          label: "Livraison annulée",
+          emoji: "⛔",
+          status: "LIVRAISON_ANNULEE",
+          tone: "danger",
+          needsComment: true,
+          commentLabel: "Motif d’annulation",
         },
         {
           id: "unavailable",

@@ -13,13 +13,34 @@ import { apiFetch, setTokenRefresher, type AuthSession } from "@/lib/api";
 import type { UserRow } from "@/lib/domain";
 import { resetMockDb } from "@/lib/mock-db";
 import { USE_MOCK } from "@/lib/mock-mode";
-import { PORTAL_BY_ROLE } from "@/lib/roles";
+import { PORTAL_BY_ROLE, type AppRole } from "@/lib/roles";
 
 export type SignUpInput = {
   name: string;
   email: string;
-  phone?: string;
+  phone: string;
   password: string;
+  role: "EXPEDITEUR" | "LIVREUR";
+  governorate: string;
+  city: string;
+  address: string;
+  productTypes?: string[];
+  productNotes?: string;
+  shopName?: string;
+};
+
+export type SignUpPendingResult = {
+  pending: true;
+  message: string;
+  user: {
+    id: number;
+    name: string;
+    email: string;
+    role: AppRole;
+    phone?: string | null;
+    approvalStatus?: string;
+    zoneId?: number | null;
+  };
 };
 
 export type ProfileInput = {
@@ -31,7 +52,7 @@ export type ProfileInput = {
 type AuthContextValue = {
   session: AuthSession | null;
   signIn: (email: string, password: string) => Promise<AuthSession>;
-  signUp: (input: SignUpInput) => Promise<AuthSession>;
+  signUp: (input: SignUpInput) => Promise<SignUpPendingResult>;
   signOut: () => Promise<void>;
   refresh: () => Promise<AuthSession | null>;
   updateProfile: (input: ProfileInput) => Promise<void>;
@@ -108,16 +129,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applySession],
   );
 
-  const signUp = useCallback(
-    async (input: SignUpInput) => {
-      const data = await apiFetch<AuthSession>("/auth/signup", {
-        method: "POST",
-        body: JSON.stringify({ ...input, role: "EXPEDITEUR" }),
-      });
-      return applySession(data);
-    },
-    [applySession],
-  );
+  const signUp = useCallback(async (input: SignUpInput) => {
+    const data = await apiFetch<SignUpPendingResult>("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    if (!data?.pending) {
+      throw new Error("Inscription inattendue — réessayez");
+    }
+    return data;
+  }, []);
 
   const refresh = useCallback(async () => {
     const current = readSession();

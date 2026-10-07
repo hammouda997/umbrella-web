@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Suspense } from "react";
 import { ParcelsManager } from "@/components/ParcelsManager";
@@ -8,10 +8,11 @@ function Body() {
     <ParcelsManager
       title={"Colis"}
       description={"Colis de votre agence"}
-      detailBasePath={"/chef-agence/parcels"}
+      detailBasePath="/chef-agence/parcels"
       canCreate
       canEdit
       canDelete
+      showPartyDetails
     />
   );
 }

@@ -5,7 +5,11 @@ import { ParcelsManager } from "@/components/ParcelsManager";
 
 function Body() {
   return (
-    <ParcelsManager title="Mes livraisons" description="Suivi destinataire" />
+    <ParcelsManager
+      title="Mes livraisons"
+      description="Suivi destinataire"
+      detailBasePath="/client/parcels"
+    />
   );
 }
 

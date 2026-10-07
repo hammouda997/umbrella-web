@@ -15,5 +15,5 @@ const AdminNavexDashboard = dynamic(
 );
 
 export default function AdminDashboardPage() {
-  return <AdminNavexDashboard basePath="/admin" />;
+  return <AdminNavexDashboard basePath="/admin" role="ADMIN" />;
 }

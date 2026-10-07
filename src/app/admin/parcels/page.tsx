@@ -12,6 +12,7 @@ function Body() {
       title="Colis"
       description="Tous les colis plateforme"
       detailBasePath="/admin/parcels"
+      showPartyDetails
     />
   );
 }

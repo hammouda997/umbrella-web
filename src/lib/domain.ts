@@ -2,6 +2,14 @@ import type { AppRole } from "@/lib/roles";
 
 export type DeliveryMode = "EXTERNAL" | "INTERNAL";
 
+export type DeliveryRoute = {
+  id: number;
+  governorate: string;
+  mode: DeliveryMode;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type TimelineEntry = {
   at: string;
   label: string;
@@ -95,7 +103,10 @@ export type Zone = {
   radiusKm: number | null;
   isActive: boolean;
   parcelCount?: number;
+  livreurCount?: number;
 };
+
+export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 /** Gouvernorat agency — separate from livreur fleet Zone. */
 export type Agency = {
@@ -115,6 +126,16 @@ export type UserRow = {
   role: AppRole;
   agencyId?: number | null;
   agency?: { id: number; name: string; governorate: string } | null;
+  zoneId?: number | null;
+  homeZone?: { id: number; name: string; governorate: string | null } | null;
+  approvalStatus?: ApprovalStatus;
+  approvedAt?: string | null;
+  governorate?: string | null;
+  city?: string | null;
+  address?: string | null;
+  shopName?: string | null;
+  productTypes?: string[];
+  productNotes?: string | null;
   isActive: boolean;
   createdAt: string;
 };

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import dynamic from "next/dynamic";
 import { OpsDashboardLoader } from "@/components/OpsDashboardLoader";
@@ -14,6 +14,6 @@ const AdminNavexDashboard = dynamic(
   },
 );
 
-export default function Page() {
-  return <AdminNavexDashboard basePath={"/support"} />;
+export default function SupportDashboardPage() {
+  return <AdminNavexDashboard basePath="/support" role="SUPPORT" />;
 }

@@ -14,20 +14,17 @@ import {
   CircleCheck,
   Clock,
   Coins,
-  CreditCard,
   Package,
   RefreshCw,
-  ScanLine,
-  Settings,
   ShieldCheck,
   Truck,
-  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { HeroVanScene } from "@/components/landing/HeroVanScene";
 import { cn } from "@/lib/cn";
 import { type OpsKpi, type OpsKpiTone } from "@/lib/ops-status-kpis";
+import type { PortalHomeConfig } from "@/lib/portal-home";
 import { hexToRgba } from "@/lib/status-categories";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 import { SortableTh, useTableSort } from "@/lib/table-sort";
@@ -456,7 +453,7 @@ function OpsKpiCard({
 type OpsDashboardProps = {
   basePath: string;
   firstName: string;
-  subtitle: string;
+  home: PortalHomeConfig;
   kpis: OpsKpi[];
   revenue: number;
   /** Cash balance held by the user (e.g. livreur), shown in the hero. */
@@ -470,8 +467,7 @@ type OpsDashboardProps = {
   recent: RecentParcel[];
   returns: RecentParcel[];
   deliveredRecent: RecentParcel[];
-  isSender: boolean;
-  showNouveauCta?: boolean;
+  onCreateParcel?: () => void;
 };
 
 /** Dark ops board — same visual language on phone and desktop (mock-identical). */
@@ -482,7 +478,7 @@ export function MobileOpsDashboard(props: OpsDashboardProps) {
 export function OpsDashboardBoard({
   basePath,
   firstName,
-  subtitle,
+  home,
   kpis,
   solde = null,
   performanceParcels = [],
@@ -490,21 +486,39 @@ export function OpsDashboardBoard({
   recent,
   returns,
   deliveredRecent,
-  isSender,
-  showNouveauCta = true,
+  onCreateParcel,
 }: OpsDashboardProps) {
   const now = new Date();
   const maxDay = Math.max(1, ...last7Days.map((d) => d.total));
   const analyticsHref = `${basePath}/analytics`;
-  const nouveauHref = `${basePath}/nouveau`;
-  const paymentsHref = `${basePath}/payments`;
   const parcelsHref = `${basePath}/parcels`;
-  const retoursHref = isSender
-    ? `${basePath}/retours`
-    : `${basePath}/parcels?status=RETOUR_DEFINITIF`;
-  const settingsHref = `${basePath}/settings`;
-  const searchHref = `${basePath}/scanner`;
-  const isLivreur = basePath.startsWith("/livreur");
+  const retoursHref = home.retoursHref;
+  const {
+    subtitle,
+    showNouveauCta,
+    showChart,
+    showPerformance,
+    showRevenue,
+    showReturns,
+    showDeliveredRecent,
+    showAnalyticsLink,
+    primaryHref,
+    primaryLabel,
+    primaryHint,
+    primaryIcon,
+    primaryAction,
+    shortcuts,
+  } = home;
+  const createInPlace =
+    (primaryAction === "create-parcel" ||
+      shortcuts.some((s) => s.action === "create-parcel" && s.primary)) &&
+    typeof onCreateParcel === "function";
+  const PrimaryIcon =
+    primaryIcon === "truck"
+      ? Truck
+      : primaryIcon === "return"
+        ? RefreshCw
+        : Package;
 
   const [perfPeriod, setPerfPeriod] = useState<PerfPeriod>("week");
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -572,164 +586,17 @@ export function OpsDashboardBoard({
     "desc",
   );
 
-  const shortcuts: {
-    href: string;
-    label: string;
-    hint: string;
-    tone: string;
-    icon: LucideIcon;
-    primary?: boolean;
-  }[] = isLivreur
-    ? [
-        {
-          href: parcelsHref,
-          label: "Ma tournée",
-          hint: "Colis à livrer aujourd’hui",
-          tone: "bg-ops-accent",
-          icon: Truck,
-          primary: true,
-        },
-        {
-          href: searchHref,
-          label: "Scanner un colis",
-          hint: "Code-barres ou QR",
-          tone: "bg-violet-600",
-          icon: ScanLine,
-        },
-        {
-          href: parcelsHref,
-          label: "Tous mes colis",
-          hint: "Historique et suivi",
-          tone: "bg-sky-600",
-          icon: Package,
-        },
-        {
-          href: settingsHref,
-          label: "Mon profil",
-          hint: "Compte et préférences",
-          tone: "bg-zinc-600",
-          icon: Settings,
-        },
-      ]
-    : isSender
-      ? [
-          {
-            href: nouveauHref,
-            label: "Nouveau colis",
-            hint: "Créer une livraison",
-            tone: "bg-ops-accent",
-            icon: Box,
-            primary: true,
-          },
-          {
-            href: parcelsHref,
-            label: "Mes colis",
-            hint: "Suivre et gérer",
-            tone: "bg-sky-600",
-            icon: Package,
-          },
-          {
-            href: searchHref,
-            label: "Scanner",
-            hint: "Rechercher un colis",
-            tone: "bg-violet-600",
-            icon: ScanLine,
-          },
-          {
-            href: paymentsHref,
-            label: "Paiements",
-            hint: "Soldes et virements",
-            tone: "bg-emerald-600",
-            icon: CreditCard,
-          },
-          {
-            href: retoursHref,
-            label: "Retours",
-            hint: "Colis à récupérer",
-            tone: "bg-amber-500",
-            icon: RefreshCw,
-          },
-          {
-            href: `${basePath}/adresses`,
-            label: "Clients",
-            hint: "Carnet d’adresses",
-            tone: "bg-[#6554C0]",
-            icon: Users,
-          },
-        ]
-      : [
-          {
-            href: nouveauHref,
-            label: "Nouveau colis",
-            hint: "Créer une livraison",
-            tone: "bg-ops-accent",
-            icon: Box,
-            primary: true,
-          },
-          {
-            href: parcelsHref,
-            label: "Tous les colis",
-            hint: "Liste et filtres",
-            tone: "bg-sky-600",
-            icon: Package,
-          },
-          {
-            href: searchHref,
-            label: "Scanner",
-            hint: "Code-barres ou QR",
-            tone: "bg-violet-600",
-            icon: ScanLine,
-          },
-          {
-            href: `${basePath}/dispatch`,
-            label: "Livraisons",
-            hint: "Dispatch et tournées",
-            tone: "bg-[#0065FF]",
-            icon: Truck,
-          },
-          {
-            href: paymentsHref,
-            label: "Paiements",
-            hint: "Encaissements",
-            tone: "bg-emerald-600",
-            icon: CreditCard,
-          },
-          {
-            href: `${basePath}/users`,
-            label: "Utilisateurs",
-            hint: "Comptes et rôles",
-            tone: "bg-[#6554C0]",
-            icon: Users,
-          },
-          {
-            href: retoursHref,
-            label: "Retours",
-            hint: "À traiter",
-            tone: "bg-amber-500",
-            icon: RefreshCw,
-          },
-        ];
-
-  const primaryHref = isLivreur
-    ? `${basePath}/parcels`
-    : showNouveauCta
-      ? nouveauHref
-      : parcelsHref;
-  const primaryLabel = isLivreur ? "Mes colis du jour" : "Nouveau colis";
-  const primaryHint = isLivreur
-    ? "Voir les colis à livrer"
-    : "Ajouter un colis en un clic";
-
   return (
     <div className="ops-board -mx-3 -mt-2 space-y-3 bg-ops-page px-3 pb-3 pt-1 text-ops-ink md:-mx-4 md:px-4 lg:-mx-5 lg:space-y-3 lg:px-5 lg:pb-2 lg:pt-0">
-      <section className="relative min-h-[168px] overflow-hidden rounded-2xl border border-ops-card bg-ops-surface sm:min-h-[180px]">
+      <section className="relative min-h-[210px] overflow-hidden rounded-2xl border border-ops-card bg-ops-surface sm:min-h-[230px]">
         <div className="pointer-events-none absolute inset-0" aria-hidden>
-          <div className="absolute inset-0 bg-gradient-to-br from-ops-page via-ops-surface to-[#2a1518]" />
+          <div className="absolute inset-0 bg-gradient-to-br from-ops-page via-ops-surface to-[#241014]" />
           <HeroVanScene variant="portal" />
-          <div className="absolute inset-0 bg-gradient-to-r from-ops-page from-[42%] via-ops-page/95 via-[68%] to-ops-page/15 sm:from-[28%] sm:via-ops-page/88 sm:via-[55%] sm:to-ops-page/10" />
+          <div className="absolute inset-0 bg-gradient-to-r from-ops-page from-[0%] via-ops-page/80 via-[28%] to-transparent to-[52%]" />
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-ops-page/55 to-transparent" />
         </div>
-        <div className="relative z-10 flex min-h-[168px] flex-col gap-4 px-4 py-4 sm:min-h-[180px] sm:flex-row sm:items-end sm:justify-between lg:px-6 lg:py-5">
-          <div className="relative z-10 min-w-0 max-w-[min(100%,18.5rem)] sm:max-w-md">
+        <div className="relative z-10 flex min-h-[210px] flex-col gap-4 px-4 py-5 sm:min-h-[230px] sm:flex-row sm:items-end sm:justify-between lg:px-6 lg:py-6">
+          <div className="relative z-10 min-w-0 max-w-[min(100%,21rem)] sm:max-w-md">
             <h1 className="font-display text-[1.5rem] font-extrabold tracking-tight text-ops-ink drop-shadow-[0_1px_8px_rgba(0,0,0,0.55)] lg:text-[1.75rem]">
               Bonjour{firstName ? ` ${firstName}` : ""}
             </h1>
@@ -757,40 +624,70 @@ export function OpsDashboardBoard({
               </p>
             </div>
           </div>
-          <Link
-            href={primaryHref}
-            className="hidden min-h-12 items-center justify-center gap-2 rounded-full bg-ops-accent px-5 py-3 text-[15px] font-semibold text-white shadow-[0_0_20px_rgba(225,29,72,0.35)] transition hover:bg-ops-accent-soft lg:inline-flex"
-          >
-            {isLivreur ? <Truck className="h-5 w-5" /> : <Package className="h-5 w-5" />}
-            {primaryLabel}
-          </Link>
+          {createInPlace ? (
+            <button
+              type="button"
+              onClick={onCreateParcel}
+              className="hidden min-h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-ops-accent/95 px-5 py-3 text-[15px] font-semibold text-white shadow-[0_8px_28px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur-sm transition hover:bg-ops-accent-soft lg:inline-flex"
+            >
+              <PrimaryIcon className="h-5 w-5" />
+              {primaryLabel}
+            </button>
+          ) : (
+            <Link
+              href={primaryHref}
+              className="hidden min-h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-ops-accent/95 px-5 py-3 text-[15px] font-semibold text-white shadow-[0_8px_28px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur-sm transition hover:bg-ops-accent-soft lg:inline-flex"
+            >
+              <PrimaryIcon className="h-5 w-5" />
+              {primaryLabel}
+            </Link>
+          )}
         </div>
       </section>
 
       {showNouveauCta ? (
-        <Link
-          href={primaryHref}
-          className="flex min-h-14 items-center gap-3 rounded-2xl bg-ops-accent px-4 py-3.5 text-white shadow-[0_10px_28px_rgba(225,29,72,0.32)] transition hover:bg-ops-accent-soft lg:hidden"
-        >
-          <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15">
-            {isLivreur ? (
-              <Truck className="h-6 w-6" strokeWidth={2.25} />
-            ) : (
-              <Package className="h-6 w-6" strokeWidth={2.25} />
-            )}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-display text-lg font-bold leading-tight">
-              {primaryLabel}
+        createInPlace ? (
+          <button
+            type="button"
+            onClick={onCreateParcel}
+            className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-ops-accent px-4 py-3.5 text-left text-white shadow-[0_10px_28px_rgba(225,29,72,0.32)] transition hover:bg-ops-accent-soft lg:hidden"
+          >
+            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15">
+              <PrimaryIcon className="h-6 w-6" strokeWidth={2.25} />
             </span>
-            <span className="mt-0.5 block text-[13px] text-white/80">
-              {primaryHint}
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-lg font-bold leading-tight">
+                {primaryLabel}
+              </span>
+              <span className="mt-0.5 block text-[13px] text-white/80">
+                {primaryHint}
+              </span>
             </span>
-          </span>
-          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
-            <ArrowRight className="h-5 w-5" />
-          </span>
-        </Link>
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
+              <ArrowRight className="h-5 w-5" />
+            </span>
+          </button>
+        ) : (
+          <Link
+            href={primaryHref}
+            className="flex min-h-14 items-center gap-3 rounded-2xl bg-ops-accent px-4 py-3.5 text-white shadow-[0_10px_28px_rgba(225,29,72,0.32)] transition hover:bg-ops-accent-soft lg:hidden"
+          >
+            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15">
+              <PrimaryIcon className="h-6 w-6" strokeWidth={2.25} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-lg font-bold leading-tight">
+                {primaryLabel}
+              </span>
+              <span className="mt-0.5 block text-[13px] text-white/80">
+                {primaryHint}
+              </span>
+            </span>
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
+              <ArrowRight className="h-5 w-5" />
+            </span>
+          </Link>
+        )
       ) : null}
 
       <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-8">
@@ -801,8 +698,10 @@ export function OpsDashboardBoard({
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,340px)] lg:items-stretch">
         <div className="flex min-w-0 flex-col gap-3">
+          {showChart || showPerformance ? (
           <div className="grid shrink-0 grid-cols-1 items-stretch gap-3 lg:grid-cols-12">
-            <section className="flex h-full flex-col rounded-2xl border border-ops-card bg-ops-surface p-3.5 shadow-ops lg:col-span-8">
+            {showChart ? (
+            <section className={`flex h-full flex-col rounded-2xl border border-ops-card bg-ops-surface p-3.5 shadow-ops ${showPerformance ? "lg:col-span-8" : "lg:col-span-12"}`}>
               <div className="flex shrink-0 items-center justify-between gap-2">
                 <h2 className="text-[17px] font-semibold text-ops-ink lg:text-[15px]">
                   Évolution des livraisons
@@ -810,12 +709,14 @@ export function OpsDashboardBoard({
                     (7 jours)
                   </span>
                 </h2>
+                {showAnalyticsLink ? (
                 <Link
                   href={analyticsHref}
                   className="shrink-0 text-[14px] font-semibold text-ops-accent lg:text-[12px]"
                 >
                   Détail →
                 </Link>
+                ) : null}
               </div>
               <div className="mt-2.5 flex min-h-[11rem] flex-1 gap-2 lg:min-h-0">
                 <div className="flex w-7 shrink-0 flex-col" aria-hidden>
@@ -880,8 +781,10 @@ export function OpsDashboardBoard({
                 </div>
               </div>
             </section>
+            ) : null}
 
-            <section className="flex h-full flex-col rounded-2xl border border-ops-card bg-ops-surface p-3.5 shadow-ops lg:col-span-4">
+            {showPerformance ? (
+            <section className={`flex h-full flex-col rounded-2xl border border-ops-card bg-ops-surface p-3.5 shadow-ops ${showChart ? "lg:col-span-4" : "lg:col-span-12"}`}>
               <div className="relative flex shrink-0 items-center justify-between gap-2">
                 <h2 className="text-[17px] font-semibold text-ops-ink lg:text-[15px]">
                   Performance
@@ -1001,6 +904,7 @@ export function OpsDashboardBoard({
                     Taux de livraison
                   </span>
                 </div>
+                {showRevenue ? (
                 <div className="flex flex-col items-center gap-1 border-ops-ink/10 lg:w-full lg:border-t lg:pt-3">
                   <span className="font-display text-xl font-extrabold tabular-nums text-ops-ink lg:text-2xl">
                     {formatMoney(perfStats.periodRevenue)}
@@ -1009,9 +913,12 @@ export function OpsDashboardBoard({
                     Chiffre d&apos;affaires
                   </span>
                 </div>
+                ) : null}
               </div>
             </section>
+            ) : null}
           </div>
+          ) : null}
 
           <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-ops-card bg-ops-surface p-4 shadow-ops">
             <div className="flex items-center justify-between gap-2">
@@ -1166,6 +1073,7 @@ export function OpsDashboardBoard({
             </ul>
           </section>
 
+          {showReturns ? (
           <section className="shrink-0 rounded-2xl border border-ops-card bg-ops-surface p-3.5 shadow-ops">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-[17px] font-semibold text-ops-ink lg:text-[15px]">
@@ -1207,6 +1115,7 @@ export function OpsDashboardBoard({
               </ul>
             )}
           </section>
+          ) : null}
         </div>
 
         <aside className="flex flex-col gap-3">
@@ -1217,17 +1126,14 @@ export function OpsDashboardBoard({
             <ul className="mt-2.5 space-y-1.5">
               {shortcuts.map((s) => {
                 const Icon = s.icon;
-                return (
-                  <li key={s.label}>
-                    <Link
-                      href={s.href}
-                      className={cn(
-                        "flex min-h-12 items-center gap-3 rounded-xl px-2.5 py-2 transition",
-                        s.primary
-                          ? "bg-ops-accent text-white shadow-[0_8px_20px_rgba(225,29,72,0.28)] hover:bg-ops-accent-soft"
-                          : "border border-ops-card bg-ops-ink/[0.03] hover:bg-ops-ink/[0.07]",
-                      )}
-                    >
+                const className = cn(
+                  "flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition",
+                  s.primary
+                    ? "bg-ops-accent text-white shadow-[0_8px_20px_rgba(225,29,72,0.28)] hover:bg-ops-accent-soft"
+                    : "border border-ops-card bg-ops-ink/[0.03] hover:bg-ops-ink/[0.07]",
+                );
+                const body = (
+                  <>
                       <span
                         className={cn(
                           "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white",
@@ -1261,20 +1167,23 @@ export function OpsDashboardBoard({
                         )}
                         aria-hidden
                       />
-                    </Link>
+                  </>
+                );
+                return (
+                  <li key={s.label}>
+                    {s.action === "create-parcel" && onCreateParcel ? (
+                      <button type="button" onClick={onCreateParcel} className={className}>
+                        {body}
+                      </button>
+                    ) : (
+                      <Link href={s.href} className={className}>
+                        {body}
+                      </Link>
+                    )}
                   </li>
                 );
               })}
             </ul>
-            {!isLivreur ? (
-              <Link
-                href={settingsHref}
-                className="mt-2 flex min-h-10 items-center justify-center gap-2 rounded-xl border border-ops-card bg-ops-ink/[0.04] px-3 py-2 text-[13px] font-semibold text-ops-ink/80 transition hover:bg-ops-ink/[0.08]"
-              >
-                <Settings className="h-4 w-4" />
-                Paramètres
-              </Link>
-            ) : null}
           </section>
 
           <section className="overflow-hidden rounded-2xl border border-ops-card bg-ops-surface shadow-ops">
@@ -1350,6 +1259,7 @@ export function OpsDashboardBoard({
             </ul>
           </section>
 
+          {showDeliveredRecent ? (
           <section className="flex flex-1 flex-col rounded-2xl border border-ops-card bg-ops-surface p-3.5 shadow-ops">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-[17px] font-semibold text-ops-ink lg:text-[15px]">
@@ -1401,6 +1311,7 @@ export function OpsDashboardBoard({
               )}
             </ul>
           </section>
+          ) : null}
         </aside>
       </div>
 

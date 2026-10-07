@@ -6,15 +6,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LogIn } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button, ErrorBanner, TextField } from "@/components/ui";
+import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { PORTAL_BY_ROLE } from "@/lib/roles";
 
 const DEMO_ACCOUNTS = [
+  { email: "super@umbrella.tn", password: "Super@12345", label: "Super admin" },
   { email: "admin@umbrella.tn", password: "Admin@12345", label: "Admin" },
+  { email: "chef@umbrella.tn", password: "Chef@12345", label: "Chef d'agence" },
+  { email: "support@umbrella.tn", password: "Support@12345", label: "Support" },
+  { email: "pickup@umbrella.tn", password: "Pickup@12345", label: "Pickup" },
+  { email: "magasinier@umbrella.tn", password: "Magasin@12345", label: "Magasinier" },
   { email: "expediteur@umbrella.tn", password: "Expediteur@12345", label: "Expéditeur" },
   { email: "livreur@umbrella.tn", password: "Livreur@12345", label: "Livreur" },
   { email: "client@umbrella.tn", password: "Client@12345", label: "Client" },
-  { email: "super@umbrella.tn", password: "Super@12345", label: "Super admin" },
 ] as const;
 
 function LoginForm() {
@@ -25,8 +30,10 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
 
   async function loginWith(nextEmail: string, nextPassword: string) {
+    setPicked(nextEmail);
     setEmail(nextEmail);
     setPassword(nextPassword);
     setLoading(true);
@@ -40,8 +47,11 @@ function LoginForm() {
         safeNext ?? session.portal ?? PORTAL_BY_ROLE[session.user.role],
       );
     } catch (err) {
+      if (err instanceof ApiError && err.code === "ACCOUNT_PENDING") {
+        router.replace("/compte-en-attente");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Connexion impossible");
-    } finally {
       setLoading(false);
     }
   }
@@ -59,7 +69,7 @@ function LoginForm() {
         <>
           Pas encore de compte ?{" "}
           <Link href="/signup" className="font-semibold text-brand hover:underline">
-            Créer un compte expéditeur
+            Créer un compte
           </Link>
         </>
       }
@@ -103,7 +113,9 @@ function LoginForm() {
               type="button"
               disabled={loading}
               onClick={() => void loginWith(acc.email, acc.password)}
-              className="rounded-xl border border-cream bg-surface px-3 py-2 text-left transition hover:border-brand disabled:opacity-60"
+              className={`rounded-xl border bg-surface px-3 py-2 text-left transition hover:border-brand disabled:opacity-60 ${
+                picked === acc.email ? "border-brand ring-1 ring-brand/30" : "border-cream"
+              }`}
             >
               <span className="block text-sm font-semibold text-ink">{acc.label}</span>
               <span className="block truncate text-[11px] text-ink-muted">{acc.email}</span>

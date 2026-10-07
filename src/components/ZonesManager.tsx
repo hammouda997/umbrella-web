@@ -36,7 +36,17 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = { id: null, name: "", governorate: "", lat: null, lng: null, radiusKm: 20 };
 
-export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
+export function ZonesManager({
+  canCreate = true,
+  canDelete = true,
+  title = "Zones de livraison",
+  description,
+}: {
+  canCreate?: boolean;
+  canDelete?: boolean;
+  title?: string;
+  description?: string;
+}) {
   const request = useApi();
   const toast = useToast();
   const confirm = useConfirm();
@@ -45,6 +55,9 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const headerDescription =
+    description ??
+    `${zones.filter((z) => z.isActive).length} zone(s) active(s) · rayon et centre utilisés pour la flotte interne`;
 
   function openEdit(zone: Zone) {
     setDraft({
@@ -119,8 +132,8 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Zones de livraison"
-        description={`${zones.filter((z) => z.isActive).length} zone(s) active(s) · rayon et centre utilisés pour la flotte interne`}
+        title={title}
+        description={headerDescription}
         actions={
           canCreate ? (
             <Button icon={Plus} onClick={() => setDraft(EMPTY_DRAFT)}>
@@ -137,7 +150,7 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
         <EmptyState
           icon={MapPinned}
           title="Aucune zone"
-          description="Créez une zone pour organiser la flotte interne."
+          description="Créez une zone (centre + rayon) pour organiser vos tournées."
         />
       ) : null}
 
@@ -153,7 +166,7 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
                 {z.isActive ? "Active" : "Inactive"}
               </Badge>
             </div>
-            <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
               <div>
                 <dt className="text-[11px] uppercase tracking-wide text-ops-ink/50">Rayon</dt>
                 <dd className="font-semibold text-ops-ink">{z.radiusKm ?? "—"} km</dd>
@@ -161,6 +174,10 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
               <div>
                 <dt className="text-[11px] uppercase tracking-wide text-ops-ink/50">Colis</dt>
                 <dd className="font-semibold text-ops-ink">{z.parcelCount ?? 0}</dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-wide text-ops-ink/50">Livreurs</dt>
+                <dd className="font-semibold text-ops-ink">{z.livreurCount ?? 0}</dd>
               </div>
               <div>
                 <dt className="text-[11px] uppercase tracking-wide text-ops-ink/50">Centre</dt>
@@ -185,15 +202,17 @@ export function ZonesManager({ canCreate = true }: { canCreate?: boolean }) {
                 >
                   {z.isActive ? "Désactiver" : "Activer"}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  icon={Trash2}
-                  disabled={busyId === z.id}
-                  onClick={() => void remove(z)}
-                >
-                  Supprimer
-                </Button>
+                {canDelete ? (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    icon={Trash2}
+                    disabled={busyId === z.id}
+                    onClick={() => void remove(z)}
+                  >
+                    Supprimer
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </Panel>

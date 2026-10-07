@@ -18,7 +18,7 @@ import { scoreAddress } from "@/lib/address-quality";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { DELIVERY_WINDOWS, type DeliveryWindowId } from "@/lib/delivery-windows";
-import type { Parcel, Zone } from "@/lib/domain";
+import type { DeliveryMode, DeliveryRoute, Parcel, Zone } from "@/lib/domain";
 import { USE_MOCK } from "@/lib/mock-mode";
 import { displayGovernorate } from "@/lib/normalize-text";
 import {
@@ -28,9 +28,30 @@ import {
 } from "@/lib/status-meta";
 import { canSeeDeliveryMode } from "@/lib/roles";
 import { useApi, useApiQuery } from "@/lib/use-api";
+import { PRODUCT_TYPES } from "@/lib/product-types";
 import { upsertZone } from "@/lib/zone-book";
 
 const SENDER_EDITABLE_STATUSES = ["EN_ATTENTE", "NON_SERIEUX"];
+
+const INTERNAL_ROUTE_GOVS = new Set([
+  "Tunis",
+  "Ariana",
+  "Ben Arous",
+  "La Mannouba",
+]);
+
+function defaultModeForGov(
+  governorate: string,
+  routes: DeliveryRoute[],
+): DeliveryMode {
+  const hit = routes.find(
+    (r) =>
+      r.governorate.localeCompare(governorate, "fr", { sensitivity: "base" }) ===
+      0,
+  );
+  if (hit) return hit.mode;
+  return INTERNAL_ROUTE_GOVS.has(governorate) ? "INTERNAL" : "EXTERNAL";
+}
 
 const EMPTY_ADDRESS: AddressLocationValue = {
   governorate: "",
@@ -69,6 +90,10 @@ export function ParcelsManager({
   returnsOnly = false,
   detailBasePath,
   showPartyDetails = false,
+  createOnly = false,
+  createOpen,
+  onCreateOpenChange,
+  onCreated,
 }: {
   canCreate?: boolean;
   canEdit?: boolean;
@@ -80,6 +105,11 @@ export function ParcelsManager({
   detailBasePath?: string;
   /** Show expéditeur + livreur columns (support retours). */
   showPartyDetails?: boolean;
+  /** Render only the create modal (for Accueil in-place create). */
+  createOnly?: boolean;
+  createOpen?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
+  onCreated?: () => void;
 }) {
   const { session } = useAuth();
   const role = session?.user.role;
@@ -91,14 +121,29 @@ export function ParcelsManager({
   const toast = useToast();
   const confirm = useConfirm();
   const { data, error, loading, reload } = useApiQuery<Parcel[]>("/parcels");
+  const { data: deliveryRoutesData } = useApiQuery<DeliveryRoute[]>(
+    canCreate || showModes ? "/delivery-routes" : null,
+  );
+  const deliveryRoutes = useMemo(
+    () => deliveryRoutesData ?? [],
+    [deliveryRoutesData],
+  );
   const parcels = useMemo(() => data ?? [], [data]);
-  const [openForm, setOpenForm] = useState(defaultOpenCreate);
+  const [internalOpenForm, setInternalOpenForm] = useState(defaultOpenCreate);
+  const openForm = createOpen ?? internalOpenForm;
+  const setOpenForm = (open: boolean) => {
+    onCreateOpenChange?.(open);
+    if (createOpen === undefined) setInternalOpenForm(open);
+  };
   const [editing, setEditing] = useState<Parcel | null>(null);
   const [saving, setSaving] = useState(false);
   const [exchange, setExchange] = useState(false);
   const [allowTry, setAllowTry] = useState(false);
   const [liabilityAccepted, setLiabilityAccepted] = useState(false);
+  const [productType, setProductType] = useState("");
+  const [productTypeOther, setProductTypeOther] = useState("");
   const [location, setLocation] = useState<AddressLocationValue>(EMPTY_ADDRESS);
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("EXTERNAL");
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [deliveryWindow, setDeliveryWindow] =
     useState<DeliveryWindowId>("journee");
@@ -116,6 +161,11 @@ export function ParcelsManager({
   useEffect(() => {
     if (openForm) setSavedAddresses(loadAddressBook());
   }, [openForm]);
+
+  useEffect(() => {
+    if (!location.governorate) return;
+    setDeliveryMode(defaultModeForGov(location.governorate, deliveryRoutes));
+  }, [location.governorate, deliveryRoutes]);
 
   const addressQuality = useMemo(() => scoreAddress(location), [location]);
 
@@ -154,7 +204,10 @@ export function ParcelsManager({
     setExchange(false);
     setAllowTry(false);
     setLiabilityAccepted(false);
+    setProductType("");
+    setProductTypeOther("");
     setLocation(EMPTY_ADDRESS);
+    setDeliveryMode("EXTERNAL");
     setDeliveryWindow("journee");
     setLandmarkPreview(null);
     setLandmarkName(null);
@@ -237,6 +290,19 @@ export function ParcelsManager({
       return;
     }
 
+    const selectedType = String(form.get("productType") || productType).trim();
+    const otherType = String(form.get("productTypeOther") || productTypeOther).trim();
+    if (!selectedType) {
+      toast.error("Choisissez le type de produit.");
+      return;
+    }
+    if (selectedType === "Autre" && otherType.length < 2) {
+      toast.error("Précisez le type de produit.");
+      return;
+    }
+    const designation =
+      selectedType === "Autre" ? otherType : selectedType;
+
     const street = location.address.trim();
     const address = location.locality.trim()
       ? `${location.locality.trim()}, ${street}`
@@ -254,9 +320,9 @@ export function ParcelsManager({
         address,
         price: Number(form.get("price")),
         articleCount: Number(form.get("articleCount") || 1),
-        designation: form.get("designation") || undefined,
+        designation,
         notes: String(form.get("notes") || "").trim() || undefined,
-        mode: showModes ? form.get("mode") : "EXTERNAL",
+        ...(showModes ? { mode: deliveryMode } : {}),
         allowOpen,
         tryProduct: allowOpen,
         liabilityAcceptedAt: allowOpen ? new Date().toISOString() : undefined,
@@ -277,7 +343,8 @@ export function ParcelsManager({
       formEl.reset();
       closeCreate();
       toast.success("Colis créé", created.code ?? undefined);
-      await reload();
+      if (!createOnly) await reload();
+      onCreated?.();
     } catch (err) {
       toast.error("Création impossible", errorText(err));
     } finally {
@@ -331,49 +398,7 @@ export function ParcelsManager({
     }
   }
 
-  return (
-    <div className="space-y-5">
-      <PageHeader
-        title={heading}
-        description={`${filtered.length} colis · ${description}`}
-        actions={
-          canCreate ? (
-            <Button
-              icon={Plus}
-              onClick={() => {
-                setEditing(null);
-                setOpenForm(true);
-              }}
-              className="w-full sm:w-auto"
-            >
-              Nouveau colis
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
-
-      {!returnsOnly ? <StatusFilterBar parcels={parcels} /> : null}
-
-      <ParcelDetailTable
-        rows={filtered}
-        loading={loading && parcels.length === 0}
-        detailBasePath={detailBasePath}
-        reportTitle={heading}
-        showPartyDetails={showPartyDetails}
-        canEditRow={canEdit ? canEditRow : undefined}
-        onEdit={
-          canEdit
-            ? (row) => {
-                setOpenForm(false);
-                setEditZoneName(row.zone?.name ?? null);
-                setEditing(row);
-              }
-            : undefined
-        }
-      />
-
+  const createModal = (
       <Modal
         open={openForm && canCreate}
         onClose={closeCreate}
@@ -573,14 +598,45 @@ export function ParcelsManager({
               Colis & paiement
             </h3>
             <div>
-              <FieldLabel htmlFor="designation">Désignation</FieldLabel>
-              <input
-                id="designation"
-                name="designation"
+              <FieldLabel htmlFor="productType">Type de produit</FieldLabel>
+              <select
+                id="productType"
+                name="productType"
                 required
                 className={fieldClass}
-              />
+                value={productType}
+                onChange={(e) => {
+                  setProductType(e.target.value);
+                  if (e.target.value !== "Autre") setProductTypeOther("");
+                }}
+              >
+                <option value="" disabled>
+                  Sélectionnez un type
+                </option>
+                {PRODUCT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
+            {productType === "Autre" ? (
+              <div>
+                <FieldLabel htmlFor="productTypeOther">
+                  Précisez le type de produit
+                </FieldLabel>
+                <input
+                  id="productTypeOther"
+                  name="productTypeOther"
+                  required
+                  minLength={2}
+                  className={fieldClass}
+                  value={productTypeOther}
+                  onChange={(e) => setProductTypeOther(e.target.value)}
+                  placeholder="Ex. meuble, pièces auto…"
+                />
+              </div>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <FieldLabel htmlFor="price">Prix en DT</FieldLabel>
@@ -636,16 +692,37 @@ export function ParcelsManager({
               </div>
               {showModes ? (
                 <div>
-                  <FieldLabel htmlFor="mode">Mode livraison</FieldLabel>
+                  <FieldLabel htmlFor="mode">Canal de livraison</FieldLabel>
                   <select
                     id="mode"
                     name="mode"
                     className={fieldClass}
-                    defaultValue="EXTERNAL"
+                    value={deliveryMode}
+                    onChange={(e) =>
+                      setDeliveryMode(e.target.value as DeliveryMode)
+                    }
                   >
-                    <option value="EXTERNAL">EXTERNAL</option>
-                    <option value="INTERNAL">INTERNAL</option>
+                    <option value="EXTERNAL">
+                      Navex (EXTERNAL)
+                      {location.governorate &&
+                      defaultModeForGov(location.governorate, deliveryRoutes) ===
+                        "EXTERNAL"
+                        ? " — auto lieu"
+                        : ""}
+                    </option>
+                    <option value="INTERNAL">
+                      Umbrella (INTERNAL)
+                      {location.governorate &&
+                      defaultModeForGov(location.governorate, deliveryRoutes) ===
+                        "INTERNAL"
+                        ? " — auto lieu"
+                        : ""}
+                    </option>
                   </select>
+                  <p className="mt-1 text-xs text-ops-ink/45">
+                    Prérempli selon le gouvernorat ; vous pouvez forcer l’autre
+                    canal.
+                  </p>
                 </div>
               ) : null}
             </div>
@@ -766,6 +843,56 @@ export function ParcelsManager({
           </section>
         </form>
       </Modal>
+  );
+
+  if (createOnly) {
+    return createModal;
+  }
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title={heading}
+        description={`${filtered.length} colis · ${description}`}
+        actions={
+          canCreate ? (
+            <Button
+              icon={Plus}
+              onClick={() => {
+                setEditing(null);
+                setOpenForm(true);
+              }}
+              className="w-full sm:w-auto"
+            >
+              Nouveau colis
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {error ? <ErrorBanner message={error} onRetry={() => void reload()} /> : null}
+
+      {!returnsOnly ? <StatusFilterBar parcels={parcels} /> : null}
+
+      <ParcelDetailTable
+        rows={filtered}
+        loading={loading && parcels.length === 0}
+        detailBasePath={detailBasePath}
+        reportTitle={heading}
+        showPartyDetails={showPartyDetails}
+        canEditRow={canEdit ? canEditRow : undefined}
+        onEdit={
+          canEdit
+            ? (row) => {
+                setOpenForm(false);
+                setEditZoneName(row.zone?.name ?? null);
+                setEditing(row);
+              }
+            : undefined
+        }
+      />
+
+      {createModal}
 
       <Modal
         open={Boolean(editing && canEdit)}

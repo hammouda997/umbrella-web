@@ -92,20 +92,21 @@ export function LandingHero({
   );
 
   return (
-    <section className="hero-block relative isolate flex min-h-[100svh] flex-col overflow-x-hidden bg-[#991211] text-white">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.07]"
-        aria-hidden
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, #E5DBD4 1px, transparent 0)",
-          backgroundSize: "28px 28px",
-        }}
-      />
-      <div
-        className="pointer-events-none absolute left-1/2 top-1/3 h-[50vh] w-[50vh] -translate-x-1/2 rounded-full bg-[#986A36]/10 blur-3xl"
-        aria-hidden
-      />
+    <section className="hero-block relative isolate flex min-h-[100svh] flex-col overflow-x-hidden bg-[#1a0a0b] text-white">
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div className="absolute inset-0 bg-gradient-to-br from-[#991211] via-[#6e0e10] to-[#1a0a0b]" />
+        <HeroVanScene />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#1a0a0b] from-[0%] via-[#991211]/75 via-[32%] to-transparent to-[58%]" />
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#1a0a0b]/70 to-transparent" />
+        <div
+          className="absolute inset-0 opacity-[0.05]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, #E5DBD4 1px, transparent 0)",
+            backgroundSize: "28px 28px",
+          }}
+        />
+      </div>
 
       <header className="hero-chrome relative z-40 shrink-0">
         <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-3 px-5 sm:h-14 sm:px-6 md:h-16 md:px-10 lg:px-14">
@@ -213,7 +214,7 @@ export function LandingHero({
         </div>
       ) : null}
 
-      <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center gap-6 px-5 py-4 sm:gap-7 sm:px-6 sm:py-5 md:px-10 lg:grid lg:grid-cols-2 lg:items-center lg:gap-10 lg:px-14 lg:py-6">
+      <div className="relative z-20 mx-auto flex w-full max-w-6xl flex-1 flex-col justify-end gap-6 px-5 pb-[38vw] pt-4 sm:justify-center sm:gap-7 sm:px-6 sm:pb-16 sm:pt-5 md:px-10 lg:justify-center lg:px-14 lg:pb-10 lg:pt-6">
         <div
           ref={contentRef}
           className="hero-content flex w-full max-w-lg flex-col items-center text-center lg:mx-0 lg:items-start lg:text-left"
@@ -287,14 +288,6 @@ export function LandingHero({
               Voir le parcours
             </a>
           </div>
-        </div>
-
-        <div className="hero-stage relative hidden min-h-[320px] w-full lg:block lg:min-h-[380px]">
-          <div
-            className="pointer-events-none absolute inset-[8%] rounded-[40%] bg-[#E5DBD4]/[0.06] blur-2xl"
-            aria-hidden
-          />
-          <HeroVanScene />
         </div>
       </div>
 

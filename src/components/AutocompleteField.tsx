@@ -162,7 +162,7 @@ export function AutocompleteField({
               ref={listRef}
               id={listId}
               role="listbox"
-              className="overflow-auto rounded-lg border border-ops-card bg-ops-surface py-1 shadow-ops"
+              className="overflow-auto rounded-lg border border-cream-soft bg-surface py-1 shadow-soft"
               style={{
                 position: "fixed",
                 zIndex: 200,
@@ -179,8 +179,8 @@ export function AutocompleteField({
                     type="button"
                     className={`w-full px-3 py-2 text-left text-sm transition ${
                       index === activeIndex
-                        ? "bg-ops-accent/15 text-ops-accent"
-                        : "text-ops-ink hover:bg-ops-ink/[0.06]"
+                        ? "bg-brand/10 text-brand"
+                        : "text-ink hover:bg-cream-soft/60"
                     }`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => commit(opt)}
@@ -194,7 +194,7 @@ export function AutocompleteField({
             </ul>
           ) : query.trim() ? (
             <p
-              className="rounded-lg border border-ops-card bg-ops-surface px-3 py-2 text-xs text-ops-ink/50 shadow-ops"
+              className="rounded-lg border border-cream-soft bg-surface px-3 py-2 text-xs text-ink-muted shadow-soft"
               style={{
                 position: "fixed",
                 zIndex: 200,
@@ -216,9 +216,9 @@ export function AutocompleteField({
 
   return (
     <div ref={rootRef} className="relative">
-      <label className="mb-1.5 block text-sm font-medium text-ops-ink">
+      <label className="mb-1.5 block text-sm font-medium text-ink">
         {label}
-        {required ? <span className="text-ops-accent"> *</span> : null}
+        {required ? <span className="text-brand"> *</span> : null}
       </label>
       <input
         ref={inputRef}
@@ -229,8 +229,8 @@ export function AutocompleteField({
         autoComplete="off"
         autoCorrect="off"
         spellCheck={false}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-ops-card bg-ops-page px-3 py-2.5 text-sm text-ops-ink outline-none transition focus:border-ops-accent disabled:cursor-not-allowed disabled:bg-ops-ink/[0.04]"
+        placeholder={disabled ? placeholder : placeholder}
+        className="w-full rounded-lg border border-cream-soft bg-surface px-3 py-2.5 text-sm outline-none transition focus:border-brand disabled:cursor-not-allowed disabled:bg-cream-soft/40"
         onFocus={() => {
           if (!disabled) setOpen(true);
         }}

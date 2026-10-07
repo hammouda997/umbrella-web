@@ -17,37 +17,25 @@ import {
   buttonClass,
 } from "@/components/ui";
 import { formatTnd, type Parcel } from "@/lib/domain";
+import { buildParcours } from "@/lib/parcel-parcours";
 import { useApiQuery } from "@/lib/use-api";
+import { cn } from "@/lib/cn";
 
-const STEPS = ["EN_ATTENTE", "A_ENLEVER", "AU_DEPOT", "EN_COURS", "LIVRES"] as const;
-const STEP_OF: Record<string, number> = {
-  NON_SERIEUX: 0,
-  EN_ATTENTE: 0,
-  A_ENLEVER: 1,
-  ENLEVES: 1,
-  AU_DEPOT: 2,
-  RETOUR_DEPOT: 2,
-  EN_COURS: 3,
-  A_VERIFIER: 3,
-  LIVRES: 4,
-  LIVRES_PAYES: 4,
-  ECHANGES: 4,
-  REMBOURSES: 4,
-};
-
-function progress(status: string) {
-  const step = STEP_OF[status];
-  return step === undefined ? null : Math.round(((step + 1) / STEPS.length) * 100);
-}
+const IN_TRANSIT = new Set([
+  "A_ENLEVER",
+  "ENLEVES",
+  "AU_DEPOT",
+  "EXPEDIE_DESTINATION",
+  "ARRIVE_DESTINATION",
+  "AFFECTE_LIVREUR",
+  "EN_COURS",
+  "A_VERIFIER",
+]);
 
 export default function ClientPage() {
   const { data, error, loading, reload } = useApiQuery<Parcel[]>("/parcels");
   const parcels = useMemo(() => data ?? [], [data]);
-  const inTransit = parcels.filter((p) =>
-    ["A_ENLEVER", "ENLEVES", "AU_DEPOT", "EN_COURS", "A_VERIFIER"].includes(
-      p.status,
-    ),
-  ).length;
+  const inTransit = parcels.filter((p) => IN_TRANSIT.has(p.status)).length;
   const delivered = parcels.filter(
     (p) => p.status === "LIVRES" || p.status === "LIVRES_PAYES",
   ).length;
@@ -96,7 +84,9 @@ export default function ClientPage() {
 
       <ul className="space-y-3">
         {parcels.map((p) => {
-          const pct = progress(p.status);
+          const parcours = buildParcours(p.status);
+          const doneCount = parcours.steps.filter((s) => s.done || s.current).length;
+          const pct = Math.round((doneCount / parcours.steps.length) * 100);
           return (
             <li key={p.id}>
               <Panel className="space-y-4">
@@ -114,26 +104,32 @@ export default function ClientPage() {
                   </div>
                   <StatusBadge status={p.status} />
                 </div>
-                {pct !== null ? (
-                  <div>
+                <div>
+                  <div
+                    className="h-2 overflow-hidden rounded-full bg-cream-soft"
+                    aria-hidden
+                  >
                     <div
-                      className="h-2 overflow-hidden rounded-full bg-cream-soft"
-                      aria-hidden
-                    >
-                      <div
-                        className="h-full rounded-full bg-brand transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className="mt-1.5 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
-                      <span>Créé</span>
-                      <span>Enlevé</span>
-                      <span>Dépôt</span>
-                      <span>En route</span>
-                      <span>Livré</span>
-                    </div>
+                      className="h-full rounded-full bg-brand transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
-                ) : null}
+                  <ol className="mt-2 flex flex-wrap gap-1.5">
+                    {parcours.steps.map((step) => (
+                      <li
+                        key={step.key}
+                        className={cn(
+                          "rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                          step.current && "bg-brand/15 text-brand",
+                          step.done && "text-ink-muted line-through",
+                          step.upcoming && "text-ink-muted/70",
+                        )}
+                      >
+                        {step.label}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
                 <div className="flex flex-col items-center gap-2 border-t border-cream pt-3 text-center sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:text-left">
                   <p className="text-xs text-ink-muted">
                     Mis à jour le{" "}

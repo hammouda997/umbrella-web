@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Manrope, Source_Sans_3 } from "next/font/google";
 import { FeedbackProvider } from "@/components/Feedback";
 import { AuthProvider } from "@/lib/auth-context";
+import { CallProvider } from "@/lib/call-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import "./globals.css";
 
@@ -50,7 +51,9 @@ export default function RootLayout({
       <body className={`${sans.variable} ${display.variable} font-sans antialiased`}>
         <ThemeProvider>
           <AuthProvider>
-            <FeedbackProvider>{children}</FeedbackProvider>
+            <CallProvider>
+              <FeedbackProvider>{children}</FeedbackProvider>
+            </CallProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

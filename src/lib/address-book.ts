@@ -12,14 +12,14 @@ export type SavedAddress = {
   updatedAt: number;
 };
 
-const KEY = "umbrella.address-book.v1";
+const KEY = "umbrella.address-book.v2";
 
 const SEED: SavedAddress[] = [
   {
     id: "seed-1",
     label: "Entrepôt principal",
     contact: "Demo Expéditeur",
-    phone: "21000000",
+    phone: "57120677",
     line: "Zone industrielle Charguia",
     city: "Ariana Ville",
     governorate: "Ariana",
@@ -30,7 +30,7 @@ const SEED: SavedAddress[] = [
     id: "seed-2",
     label: "Point relais client VIP",
     contact: "Amira Trabelsi",
-    phone: "98765432",
+    phone: "51926850",
     line: "Avenue Habib Bourguiba",
     city: "Ezzahra",
     governorate: "Ben_Arous",

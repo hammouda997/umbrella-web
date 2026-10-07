@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,28 +8,39 @@ import {
   Package,
   CheckCircle2,
   AlertTriangle,
-  Zap,
+  Truck,
+  UserRound,
+  Usb,
+  X,
+  History,
+  Route,
 } from "lucide-react";
 import { DashboardHero } from "@/components/DashboardHero";
-import { Button, Panel, buttonClass } from "@/components/ui";
-import { useToast } from "@/components/Feedback";
+import { ParcelBarcode } from "@/components/ParcelBarcode";
+import { TypeaheadSelect } from "@/components/TypeaheadSelect";
+import { Button, Panel, SelectField, buttonClass } from "@/components/ui";
+import { useConfirm, useToast } from "@/components/Feedback";
 import { PORTAL_BY_ROLE, type AppRole } from "@/lib/roles";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { formatTnd, type Parcel } from "@/lib/domain";
+import { formatTnd, type Parcel, type TimelineEntry } from "@/lib/domain";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { canScanMutate } from "@/lib/scan-actions";
+import { canTransition, requiresComment } from "@/lib/parcel-transitions";
 import {
-  ACTION_TONE_CLASS,
-  livreurActionsFor,
-  type LivreurAction,
-} from "@/lib/livreur-actions";
-import {
-  allowedTargets,
-  canTransition,
-  requiresComment,
-} from "@/lib/parcel-transitions";
+  caseProgress,
+  casesForRole,
+  isExpectedCaseStep,
+  nextCaseStatus,
+  stepLabel,
+  type ScanCase,
+  type ScanCaseId,
+} from "@/lib/scan-cases";
+import { scanCodeCandidates } from "@/lib/normalize-scan-code";
 import { useHidScanner } from "@/lib/use-hid-scanner";
 import { cn } from "@/lib/cn";
+
+type StepChoice = "AUTO" | StatusKey;
 
 type ScanFeedback = {
   tone: "ok" | "warn" | "error";
@@ -37,78 +48,122 @@ type ScanFeedback = {
   detail?: string;
 };
 
-type ScanAction = {
-  id: string;
-  label: string;
-  status: StatusKey;
-  tone: LivreurAction["tone"];
-  needsComment?: boolean;
-  commentLabel?: string;
+type MachineTestState =
+  | { phase: "idle" }
+  | { phase: "listening"; startedAt: number }
+  | { phase: "ok"; code: string; ms: number }
+  | { phase: "fail"; reason: string };
+
+type DriverOption = {
+  id: number;
+  name: string;
+  phone?: string | null;
+  zoneId?: number | null;
 };
 
-function actionsForRole(status: string, role: AppRole): ScanAction[] {
-  const gateRole: AppRole =
-    role === "SUPER_ADMIN" || role === "ADMIN" || role === "CHEF_AGENCE"
-      ? "ADMIN"
-      : role;
+const MACHINE_TEST_MS = 30_000;
+const SCAN_IDLE_ACCEPT_MS = 350;
+const MACHINE_TEST_CODE = "UMB-TEST-SCAN";
+const MACHINE_OK_KEY = "umbrella.scanner.machineOk";
 
-  const fromLivreur = livreurActionsFor(status)
-    .filter(
-      (a) =>
-        a.status === status || canTransition(status, a.status, gateRole).ok,
-    )
-    .map((a) => ({
-      id: a.id,
-      label: a.label,
-      status: a.status,
-      tone: a.tone,
-      needsComment: Boolean(a.needsComment) || requiresComment(a.status, status),
-      commentLabel: a.commentLabel,
-    }));
+function formatWhen(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("fr-TN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
 
-  if (role === "LIVREUR") return fromLivreur;
-
-  const covered = new Set(fromLivreur.map((a) => a.status));
-  const extras: ScanAction[] = allowedTargets(status)
-    .filter((to) => !covered.has(to))
-    .map((to) => ({
-      id: to,
-      label: STATUS_META[to].label,
-      status: to,
-      tone: "neutral" as const,
-      needsComment: requiresComment(to, status),
-      commentLabel: "Motif",
-    }));
-
-  return [...fromLivreur, ...extras];
+function sortedTimeline(entries: TimelineEntry[] | undefined): TimelineEntry[] {
+  if (!entries?.length) return [];
+  return [...entries].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+  );
 }
 
 export function ScannerPage({ role }: { role: AppRole }) {
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const { session } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const inflight = useRef(false);
-  const bulkRef = useRef<ScanAction | null>(null);
-  const commentRef = useRef("");
+  const caseRef = useRef<ScanCase | null>(null);
+  const livreurRef = useRef<DriverOption | null>(null);
+  const stepRef = useRef<StepChoice>("AUTO");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [comment, setComment] = useState("");
   const [parcel, setParcel] = useState<Parcel | null>(null);
   const [feedback, setFeedback] = useState<ScanFeedback | null>(null);
-  const [pendingAction, setPendingAction] = useState<ScanAction | null>(null);
-  const [bulkAction, setBulkAction] = useState<ScanAction | null>(null);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState<ScanCaseId | null>(null);
+  const [selectedStep, setSelectedStep] = useState<StepChoice>("AUTO");
+  const [selectedLivreur, setSelectedLivreur] = useState<DriverOption | null>(
+    null,
+  );
+  const [machineTest, setMachineTest] = useState<MachineTestState>(() => {
+    if (typeof window === "undefined") return { phase: "idle" };
+    try {
+      const raw = sessionStorage.getItem(MACHINE_OK_KEY);
+      if (raw) {
+        return { phase: "ok", code: raw, ms: 0 };
+      }
+    } catch {
+      /* ignore */
+    }
+    return { phase: "idle" };
+  });
+  const [showMachineTest, setShowMachineTest] = useState(false);
+  const machineListening = useRef(false);
+  const machineStartedAt = useRef(0);
+  const machineTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const base = PORTAL_BY_ROLE[role];
   const firstName = session?.user.name?.split(/\s+/)[0] ?? "";
-  const canMutate =
-    role === "SUPER_ADMIN" || role === "ADMIN" || role === "LIVREUR";
+  const canMutate = canScanMutate(role);
+  const operatorName = session?.user.name ?? "Opérateur";
 
-  commentRef.current = comment;
-  bulkRef.current = bulkAction;
+  const availableCases = useMemo(
+    () => (canMutate ? casesForRole(role) : []),
+    [canMutate, role],
+  );
 
-  const actions = useMemo(
-    () => (parcel && canMutate ? actionsForRole(parcel.status, role) : []),
-    [parcel, canMutate, role],
+  const selectedCase = useMemo(
+    () => availableCases.find((c) => c.id === selectedCaseId) ?? null,
+    [availableCases, selectedCaseId],
+  );
+
+  caseRef.current = selectedCase;
+  livreurRef.current = selectedLivreur;
+  stepRef.current = selectedStep;
+  machineListening.current = machineTest.phase === "listening";
+
+  const progress = useMemo(
+    () =>
+      selectedCase && parcel
+        ? caseProgress(selectedCase, parcel.status)
+        : selectedCase
+          ? selectedCase.steps.map((key) => ({
+              key,
+              label: stepLabel(key),
+              done: false,
+              current: false,
+            }))
+          : [],
+    [selectedCase, parcel],
+  );
+
+  const history = useMemo(
+    () => sortedTimeline(parcel?.timeline),
+    [parcel?.timeline],
   );
 
   const focusInput = useCallback(() => {
@@ -118,69 +173,316 @@ export function ScannerPage({ role }: { role: AppRole }) {
     });
   }, []);
 
-  const applyStatus = useCallback(
-    async (target: Parcel, action: ScanAction, note: string) => {
-      const needComment =
-        Boolean(action.needsComment) ||
-        requiresComment(action.status, target.status);
-      if (needComment && !note.trim()) {
-        setPendingAction(action);
+  const loadDrivers = useCallback(async () => {
+    if (!session?.accessToken) return;
+    setDriversLoading(true);
+    try {
+      const list = await apiFetch<DriverOption[]>("/users/livreurs", {
+        token: session.accessToken,
+      });
+      setDrivers(list);
+    } catch {
+      setDrivers([]);
+      toast.error("Impossible de charger les livreurs");
+    } finally {
+      setDriversLoading(false);
+    }
+  }, [session?.accessToken, toast]);
+
+  useEffect(() => {
+    if (!selectedCase?.needsLivreur) return;
+    if (role === "LIVREUR" && session?.user) {
+      setSelectedLivreur({
+        id: session.user.id,
+        name: session.user.name,
+        phone: session.user.phone ?? null,
+      });
+      return;
+    }
+    void loadDrivers();
+  }, [selectedCase?.needsLivreur, role, session?.user, loadDrivers]);
+
+  const livreurOptions = useMemo(
+    () =>
+      drivers.map((d) => ({
+        id: String(d.id),
+        label: d.name,
+        hint: d.phone ?? undefined,
+        value: d,
+      })),
+    [drivers],
+  );
+
+  const clearMachineTimer = useCallback(() => {
+    if (machineTimer.current) {
+      clearTimeout(machineTimer.current);
+      machineTimer.current = null;
+    }
+    if (scanIdleTimer.current) {
+      clearTimeout(scanIdleTimer.current);
+      scanIdleTimer.current = null;
+    }
+  }, []);
+
+  const stopMachineTest = useCallback(() => {
+    clearMachineTimer();
+    machineListening.current = false;
+    setMachineTest({ phase: "idle" });
+    focusInput();
+  }, [clearMachineTimer, focusInput]);
+
+  const completeMachineTest = useCallback(
+    (scanned: string) => {
+      const value = scanned.trim();
+      if (!value || !machineListening.current) return false;
+      const started = machineStartedAt.current || Date.now();
+      clearMachineTimer();
+      machineListening.current = false;
+      setMachineTest({
+        phase: "ok",
+        code: value,
+        ms: Math.max(0, Date.now() - started),
+      });
+      try {
+        sessionStorage.setItem(MACHINE_OK_KEY, value);
+      } catch {
+        /* ignore */
+      }
+      setCode("");
+      setShowMachineTest(false);
+      setFeedback({
+        tone: "ok",
+        title: "Douchette OK — pas besoin de reconnecter",
+        detail: `Code reçu : ${value}. Scannez n’importe quel colis quand vous voulez.`,
+      });
+      toast.success("Douchette OK", "Mémorisée pour cette session");
+      focusInput();
+      return true;
+    },
+    [clearMachineTimer, toast, focusInput],
+  );
+
+  const startMachineTest = useCallback(() => {
+    clearMachineTimer();
+    setParcel(null);
+    setCode("");
+    const startedAt = Date.now();
+    machineStartedAt.current = startedAt;
+    machineListening.current = true;
+    setShowMachineTest(true);
+    setMachineTest({ phase: "listening", startedAt });
+    setFeedback({
+      tone: "warn",
+      title: "Test machine — 30 s",
+      detail:
+        "1) Cliquez le champ code  2) Scannez UMB-TEST-SCAN (ou n’importe quel code). Utilisez Chrome/Edge.",
+    });
+    focusInput();
+    machineTimer.current = setTimeout(() => {
+      if (!machineListening.current) return;
+      machineListening.current = false;
+      setMachineTest({
+        phase: "fail",
+        reason:
+          "Aucun caractère reçu. Douchette en mode clavier (HID), Chrome sur localhost:3010, focus sur le champ.",
+      });
+      setFeedback({
+        tone: "error",
+        title: "Machine non détectée",
+        detail: "Testez d’abord dans Notepad, puis ici.",
+      });
+      toast.error("Test échoué", "Aucun scan reçu");
+      focusInput();
+    }, MACHINE_TEST_MS);
+  }, [clearMachineTimer, focusInput, toast]);
+
+  useEffect(() => () => clearMachineTimer(), [clearMachineTimer]);
+
+  useEffect(() => {
+    if (machineTest.phase !== "listening") return;
+    const id = window.setInterval(() => {
+      const el = inputRef.current;
+      if (el && document.activeElement !== el) el.focus();
+    }, 800);
+    return () => window.clearInterval(id);
+  }, [machineTest.phase]);
+
+  function onScanInputChange(value: string) {
+    setCode(value);
+    if (!machineListening.current) return;
+    if (scanIdleTimer.current) clearTimeout(scanIdleTimer.current);
+    const trimmed = value.trim();
+    if (trimmed.length < 3) return;
+    scanIdleTimer.current = setTimeout(() => {
+      if (machineListening.current) completeMachineTest(trimmed);
+    }, SCAN_IDLE_ACCEPT_MS);
+  }
+
+  const buildCaseComment = useCallback(
+    (scanCase: ScanCase, next: StatusKey, livreur: DriverOption | null) => {
+      const parts = [
+        `Cas: ${scanCase.label}`,
+        `Scan: ${operatorName}`,
+      ];
+      if (livreur) parts.push(`Livreur: ${livreur.name}`);
+      if (requiresComment(next, "")) {
+        parts.push(`Étape: ${stepLabel(next)}`);
+      }
+      return parts.join(" · ");
+    },
+    [operatorName],
+  );
+
+  const applyCaseStep = useCallback(
+    async (target: Parcel, scanCase: ScanCase, livreur: DriverOption | null) => {
+      const stepChoice = stepRef.current;
+      const next =
+        stepChoice === "AUTO"
+          ? nextCaseStatus(scanCase, target.status, role)
+          : stepChoice;
+
+      if (!next) {
         setFeedback({
-          tone: "warn",
-          title: "Motif requis",
-          detail: action.commentLabel ?? "Saisissez un commentaire.",
+          tone: "ok",
+          title: "Cycle terminé pour ce cas",
+          detail: `${target.code ?? ""} · ${STATUS_META[target.status as StatusKey]?.label ?? target.status}`,
         });
-        return false;
+        return target;
       }
 
-      const gate = canTransition(target.status, action.status, role);
+      if (next === target.status) {
+        setFeedback({
+          tone: "warn",
+          title: "Déjà à cette étape",
+          detail: `${target.code ?? ""} · ${stepLabel(next)}. Choisissez l’étape suivante.`,
+        });
+        return target;
+      }
+
+      if (
+        scanCase.needsLivreur &&
+        (next === "AFFECTE_LIVREUR" || next === "EN_COURS") &&
+        !livreur
+      ) {
+        setFeedback({
+          tone: "warn",
+          title: "Choisir qui récupère / livre",
+          detail: "Sélectionnez le livreur avant de scanner.",
+        });
+        return null;
+      }
+
+      const gate = canTransition(target.status, next, role);
       if (!gate.ok) {
         setFeedback({
           tone: "error",
-          title: "Action refusée",
+          title: "Étape impossible",
           detail: gate.reason,
         });
-        toast.error("Action refusée", gate.reason);
-        return false;
+        toast.error("Étape impossible", gate.reason);
+        return null;
       }
 
-      if (inflight.current) return false;
-      inflight.current = true;
-      setBusy(true);
-      try {
-        const result = await apiFetch<Parcel>("/parcels/scan", {
+      const currentLabel =
+        STATUS_META[target.status as StatusKey]?.label ?? target.status;
+      const nextLbl = stepLabel(next);
+      const aligned = isExpectedCaseStep(scanCase, target.status, next);
+
+      if (!aligned) {
+        setFeedback({
+          tone: "warn",
+          title: "Cas / étape non alignés",
+          detail: `Colis « ${currentLabel} » → « ${nextLbl} ». Confirmation requise.`,
+        });
+        const first = await confirm({
+          title: "Étape incorrecte pour ce parcours",
+          description: `Le colis est « ${currentLabel} », mais l’étape choisie / cas (« ${scanCase.label} ») appliquerait « ${nextLbl} ». Continuer quand même ?`,
+          confirmLabel: "Continuer",
+          cancelLabel: "Annuler",
+          tone: "danger",
+        });
+        if (!first) {
+          setFeedback({
+            tone: "warn",
+            title: "Scan annulé",
+            detail: "Choisissez le bon parcours / étape, puis rescandez.",
+          });
+          return null;
+        }
+        const second = await confirm({
+          title: "Deuxième confirmation",
+          description: `Confirmez vraiment le passage de « ${currentLabel} » vers « ${nextLbl} » pour ${target.code ?? "ce colis"}.`,
+          confirmLabel: "Oui, appliquer",
+          cancelLabel: "Non",
+          tone: "danger",
+        });
+        if (!second) {
+          setFeedback({
+            tone: "warn",
+            title: "Scan annulé",
+            detail: "Statut inchangé.",
+          });
+          return null;
+        }
+      }
+
+      const note = buildCaseComment(scanCase, next, livreur);
+      const body: Record<string, unknown> = {
+        code: target.code ?? String(target.id),
+        status: next,
+        comment: note,
+      };
+      if (
+        livreur &&
+        (next === "AFFECTE_LIVREUR" || next === "EN_COURS")
+      ) {
+        body.driverId = livreur.id;
+      }
+
+      const result = await apiFetch<Parcel>("/parcels/scan", {
+        method: "POST",
+        token: session?.accessToken,
+        body: JSON.stringify(body),
+      });
+      setParcel(result);
+
+      if (stepChoice !== "AUTO") {
+        const idx = scanCase.steps.indexOf(next);
+        const following = idx >= 0 ? scanCase.steps[idx + 1] : undefined;
+        setSelectedStep(following ?? "AUTO");
+      }
+
+      setFeedback({
+        tone: "ok",
+        title: `OK — ${nextLbl}`,
+        detail: [
+          result.code ?? undefined,
+          livreur ? `Livreur: ${livreur.name}` : null,
+          `Par: ${operatorName}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
+      toast.success(nextLbl, result.code ?? undefined);
+      return result;
+    },
+    [role, session?.accessToken, toast, confirm, buildCaseComment, operatorName],
+  );
+
+  const fetchParcelByCode = useCallback(
+    async (code: string): Promise<Parcel> => {
+      if (canMutate) {
+        return apiFetch<Parcel>("/parcels/scan", {
           method: "POST",
           token: session?.accessToken,
-          body: JSON.stringify({
-            code: target.code ?? String(target.id),
-            status: action.status,
-            comment: note.trim() || undefined,
-          }),
+          body: JSON.stringify({ code }),
         });
-        setParcel(result);
-        setPendingAction(null);
-        setComment("");
-        const label = STATUS_META[action.status]?.label ?? action.label;
-        setFeedback({
-          tone: "ok",
-          title: `OK — ${label}`,
-          detail: result.code ?? undefined,
-        });
-        toast.success(label, result.code ?? undefined);
-        setCode("");
-        return true;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erreur";
-        setFeedback({ tone: "error", title: "Échec", detail: msg });
-        toast.error("Échec", msg);
-        return false;
-      } finally {
-        inflight.current = false;
-        setBusy(false);
-        focusInput();
       }
+      return apiFetch<Parcel>(`/parcels/by-code/${encodeURIComponent(code)}`, {
+        token: session?.accessToken,
+      });
     },
-    [role, session?.accessToken, toast, focusInput],
+    [canMutate, session?.accessToken],
   );
 
   const lookupParcel = useCallback(
@@ -188,59 +490,107 @@ export function ScannerPage({ role }: { role: AppRole }) {
       const q = raw.trim();
       if (!q || inflight.current) return;
 
+      const candidates = scanCodeCandidates(q);
+      const primary = candidates[0] ?? q;
+      const normalized = candidates.find((c) => c !== primary) ?? primary;
+
+      if (machineListening.current) {
+        completeMachineTest(normalized);
+        return;
+      }
+
+      if (candidates.some((c) => c.toUpperCase() === MACHINE_TEST_CODE)) {
+        machineListening.current = true;
+        machineStartedAt.current = Date.now();
+        completeMachineTest(MACHINE_TEST_CODE);
+        return;
+      }
+
+      const activeCase = caseRef.current;
+      const activeLivreur = livreurRef.current;
+
+      if (canMutate && !activeCase) {
+        setFeedback({
+          tone: "warn",
+          title: "Choisissez un parcours",
+          detail: "Parcours → (étape) → scan du colis réel.",
+        });
+        return;
+      }
+
       inflight.current = true;
       setBusy(true);
       setFeedback(null);
-      setPendingAction(null);
 
       try {
         if (role === "CLIENT") {
-          router.push(`/track?code=${encodeURIComponent(q)}`);
+          router.push(`/track?code=${encodeURIComponent(normalized)}`);
           return;
         }
 
-        let found: Parcel;
-        if (canMutate) {
-          found = await apiFetch<Parcel>("/parcels/scan", {
-            method: "POST",
-            token: session?.accessToken,
-            body: JSON.stringify({ code: q }),
-          });
-        } else {
-          found = await apiFetch<Parcel>(
-            `/parcels/by-code/${encodeURIComponent(q)}`,
-            { token: session?.accessToken },
+        let found: Parcel | null = null;
+        let usedCode = primary;
+        let lastError: unknown = null;
+        for (const candidate of candidates) {
+          try {
+            found = await fetchParcelByCode(candidate);
+            usedCode = candidate;
+            break;
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        if (!found) throw lastError ?? new Error("Colis introuvable");
+
+        if (usedCode !== primary) {
+          toast.info(
+            "Code corrigé",
+            `${primary} → ${usedCode} (clavier AZERTY)`,
           );
         }
 
         setParcel(found);
         setCode("");
-        setFeedback({
-          tone: "ok",
-          title: "Colis trouvé",
-          detail: `${found.code ?? q} · ${STATUS_META[found.status as StatusKey]?.label ?? found.status}`,
-        });
 
         if (role === "EXPEDITEUR") {
           router.push(
-            `${base}/parcels?q=${encodeURIComponent(found.code ?? q)}`,
+            `${base}/parcels?q=${encodeURIComponent(found.code ?? usedCode)}`,
           );
           return;
         }
 
-        const rapid = bulkRef.current;
-        if (rapid && canMutate) {
+        if (canMutate && activeCase) {
           inflight.current = false;
           setBusy(false);
-          await applyStatus(found, rapid, commentRef.current);
+          const updated = await applyCaseStep(
+            found,
+            activeCase,
+            activeLivreur,
+          );
+          if (updated) {
+            setParcel(updated);
+          }
           return;
         }
+
+        setFeedback({
+          tone: "ok",
+          title: "Colis trouvé",
+          detail: `${found.code ?? usedCode} · ${STATUS_META[found.status as StatusKey]?.label ?? found.status}`,
+        });
       } catch (err) {
         setParcel(null);
         const msg = err instanceof Error ? err.message : "Introuvable";
-        setFeedback({ tone: "error", title: "Scan échoué", detail: msg });
+        setFeedback({
+          tone: "error",
+          title: "Scan échoué",
+          detail:
+            msg === "Colis introuvable" && primary !== normalized
+              ? `${msg} (lu « ${primary} », essayé « ${normalized} »). Vérifiez le clavier EN (US) ou utilisez Scanner ce colis.`
+              : msg,
+        });
         toast.error("Scan échoué", msg);
-        setCode(q);
+        setCode(normalized !== primary ? normalized : primary);
       } finally {
         if (inflight.current) {
           inflight.current = false;
@@ -257,13 +607,19 @@ export function ScannerPage({ role }: { role: AppRole }) {
       base,
       toast,
       focusInput,
-      applyStatus,
+      applyCaseStep,
+      completeMachineTest,
+      fetchParcelByCode,
     ],
   );
 
   useHidScanner({
     enabled: role !== "CLIENT",
     onScan: (scanned) => {
+      if (machineListening.current) {
+        completeMachineTest(scanned);
+        return;
+      }
       void lookupParcel(scanned);
     },
   });
@@ -273,11 +629,47 @@ export function ScannerPage({ role }: { role: AppRole }) {
     void lookupParcel(code);
   }
 
+  function selectCase(scanCase: ScanCase | null) {
+    if (!scanCase) {
+      setSelectedCaseId(null);
+      setSelectedStep("AUTO");
+      return;
+    }
+    setSelectedCaseId(scanCase.id);
+    setSelectedStep("AUTO");
+    setParcel(null);
+    setFeedback({
+      tone: "warn",
+      title: scanCase.label,
+      detail:
+        "Étape auto ou manuelle, puis scannez le bordereau. Livreur seulement pour Affecter / En cours.",
+    });
+    if (!scanCase.needsLivreur) {
+      setSelectedLivreur(null);
+    } else if (role === "LIVREUR" && session?.user) {
+      setSelectedLivreur({
+        id: session.user.id,
+        name: session.user.name,
+        phone: session.user.phone ?? null,
+      });
+    }
+    focusInput();
+  }
+
+  const stepNeedsLivreur =
+    selectedStep === "AFFECTE_LIVREUR" || selectedStep === "EN_COURS";
+  const readyToScan =
+    !canMutate ||
+    (Boolean(selectedCase) &&
+      (!stepNeedsLivreur ||
+        Boolean(selectedLivreur) ||
+        role === "LIVREUR"));
+
   return (
     <div className="mx-auto max-w-2xl space-y-5 pb-8">
       <div className="lg:hidden">
         <DashboardHero
-          subtitle={`Bonjour${firstName ? ` ${firstName}` : ""} — scannez le bordereau.`}
+          subtitle={`Bonjour${firstName ? ` ${firstName}` : ""} — choisissez le cas, puis scannez.`}
         />
       </div>
 
@@ -290,50 +682,348 @@ export function ScannerPage({ role }: { role: AppRole }) {
             Scanner bordereau
           </h1>
           <p className="mt-1 max-w-md text-sm text-ops-ink/50">
-            Scannez le code-barres — les actions disponibles s’affichent selon
-            l’état du colis.
+            Parcours → étape → livreur → colis → scan
+          </p>
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-ops-ink/40">
+            <UserRound className="h-3.5 w-3.5" />
+            Opérateur : {operatorName}
           </p>
         </div>
 
+        <div
+          className={cn(
+            "flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+            machineTest.phase === "ok" &&
+              "border-emerald-500/40 bg-emerald-500/10",
+            machineTest.phase === "listening" &&
+              "border-amber-500/40 bg-amber-500/10",
+            machineTest.phase === "fail" &&
+              "border-ops-accent/40 bg-ops-accent/10",
+            machineTest.phase === "idle" &&
+              "border-ops-card bg-ops-page/60",
+          )}
+        >
+          <div className="flex items-start gap-3 text-left">
+            <span
+              className={cn(
+                "mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                machineTest.phase === "ok" && "bg-emerald-500 text-white",
+                machineTest.phase === "listening" && "bg-amber-500 text-white",
+                machineTest.phase === "fail" && "bg-ops-accent text-white",
+                machineTest.phase === "idle" &&
+                  "bg-ops-card text-ops-ink/55",
+              )}
+            >
+              <Usb className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-ops-ink">
+                {machineTest.phase === "ok"
+                  ? "Connecté"
+                  : machineTest.phase === "listening"
+                    ? "Connexion…"
+                    : machineTest.phase === "fail"
+                      ? "Non connecté"
+                      : "Machine non connectée"}
+              </p>
+              <p className="mt-0.5 text-[12px] text-ops-ink/50">
+                {machineTest.phase === "ok"
+                  ? `Douchette OK${machineTest.code ? ` · dernier code « ${machineTest.code} »` : ""} — pas besoin de reconnecter`
+                  : machineTest.phase === "listening"
+                    ? "Scannez le code de test (30 s)"
+                    : machineTest.phase === "fail"
+                      ? machineTest.reason
+                      : "Cliquez Connecter, puis scannez une fois pour valider la douchette"}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {machineTest.phase === "listening" ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  stopMachineTest();
+                  setShowMachineTest(false);
+                }}
+              >
+                Annuler
+              </Button>
+            ) : machineTest.phase === "ok" ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-2.5 py-1.5 text-[12px] font-semibold text-emerald-200">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Connecté
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={Usb}
+                  onClick={() => {
+                    try {
+                      sessionStorage.removeItem(MACHINE_OK_KEY);
+                    } catch {
+                      /* ignore */
+                    }
+                    setMachineTest({ phase: "idle" });
+                    setShowMachineTest(true);
+                    startMachineTest();
+                  }}
+                >
+                  Reconnecter
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                icon={Usb}
+                onClick={() => {
+                  setShowMachineTest(true);
+                  startMachineTest();
+                }}
+              >
+                Connecter
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {machineTest.phase === "listening" ||
+        (showMachineTest && machineTest.phase !== "ok") ? (
+          <div
+            className={cn(
+              "rounded-2xl border p-4",
+              machineTest.phase === "listening"
+                ? "border-amber-500/40 bg-amber-500/10"
+                : "border-ops-card bg-ops-page/60",
+            )}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-ops-ink">
+                Code de test — scannez avec la douchette
+              </p>
+              <button
+                type="button"
+                aria-label="Fermer"
+                onClick={() => {
+                  stopMachineTest();
+                  setShowMachineTest(false);
+                }}
+                className="rounded-lg p-1 text-ops-ink/45 transition hover:text-ops-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="rounded-xl bg-white px-3 py-4 shadow-sm">
+              <ParcelBarcode
+                code={MACHINE_TEST_CODE}
+                height={72}
+                className="mx-auto flex w-full max-w-md justify-center [&_svg]:h-auto [&_svg]:w-full"
+              />
+            </div>
+            <p className="mt-2 text-center font-mono text-xs font-bold text-ops-ink">
+              {MACHINE_TEST_CODE}
+            </p>
+            {machineTest.phase === "fail" ? (
+              <Button
+                type="button"
+                size="sm"
+                className="mt-3 w-full"
+                variant="secondary"
+                onClick={startMachineTest}
+              >
+                Relancer la connexion
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {canMutate && availableCases.length > 0 ? (
+          <div className="space-y-3 rounded-2xl border border-ops-card bg-ops-page/60 p-4">
+            <SelectField
+              label="Parcours"
+              value={selectedCaseId ?? ""}
+              onChange={(e) => {
+                const id = e.target.value as ScanCaseId | "";
+                const hit = availableCases.find((c) => c.id === id) ?? null;
+                selectCase(hit);
+              }}
+            >
+              <option value="">— Choisir un parcours —</option>
+              {availableCases.map((scanCase) => (
+                <option key={scanCase.id} value={scanCase.id}>
+                  {scanCase.label}
+                </option>
+              ))}
+            </SelectField>
+            {selectedCase ? (
+              <p className="text-[11px] leading-snug text-ops-ink/45">
+                {selectedCase.description}
+              </p>
+            ) : null}
+
+            {selectedCase ? (
+              <SelectField
+                label="Étape à appliquer"
+                value={selectedStep}
+                onChange={(e) => {
+                  const v = e.target.value as StepChoice;
+                  setSelectedStep(v);
+                  focusInput();
+                }}
+              >
+                <option value="AUTO">
+                  Automatique — étape suivante du parcours
+                </option>
+                {selectedCase.steps.map((step, i) => (
+                  <option key={step} value={step}>
+                    {i + 1}. {stepLabel(step)}
+                  </option>
+                ))}
+              </SelectField>
+            ) : null}
+
+            {selectedCase?.needsLivreur && role !== "LIVREUR" ? (
+              <TypeaheadSelect<DriverOption>
+                label="Livreur"
+                placeholder="Tapez un nom ou téléphone…"
+                options={livreurOptions}
+                value={selectedLivreur}
+                displayValue={selectedLivreur?.name ?? ""}
+                loading={driversLoading}
+                emptyText="Aucun livreur"
+                onSelect={(opt) => {
+                  setSelectedLivreur(opt.value);
+                  focusInput();
+                }}
+                onClear={() => setSelectedLivreur(null)}
+              />
+            ) : null}
+
+            {selectedCase && role === "LIVREUR" && selectedLivreur ? (
+              <div className="flex items-center gap-2 rounded-xl border border-ops-card bg-ops-surface px-3 py-2 text-sm text-ops-ink/70">
+                <Truck className="h-4 w-4 text-ops-accent" />
+                Vous êtes le livreur : {selectedLivreur.name}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {selectedCase ? (
+          <div className="rounded-2xl border border-ops-card bg-ops-page/60 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Route className="h-4 w-4 text-ops-accent" />
+              <p className="text-sm font-semibold text-ops-ink">
+                Aperçu parcours
+              </p>
+              {selectedStep !== "AUTO" ? (
+                <span className="ml-auto rounded-md bg-ops-accent/15 px-2 py-0.5 text-[10px] font-bold text-ops-accent">
+                  Étape forcée
+                </span>
+              ) : null}
+            </div>
+            <ol className="space-y-1.5">
+              {progress.map((step, i) => {
+                const forced = selectedStep === step.key;
+                return (
+                  <li
+                    key={step.key}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px]",
+                      forced && "bg-ops-accent/20 font-semibold text-ops-ink",
+                      !forced &&
+                        step.current &&
+                        "bg-ops-accent/10 font-semibold text-ops-ink",
+                      !forced && step.done && "text-ops-ink/40 line-through",
+                      !forced &&
+                        !step.done &&
+                        !step.current &&
+                        "text-ops-ink/55",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                        forced || step.current
+                          ? "bg-ops-accent text-white"
+                          : step.done
+                            ? "bg-emerald-500/30 text-emerald-200"
+                            : "bg-ops-card text-ops-ink/50",
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left hover:underline"
+                      onClick={() => setSelectedStep(step.key)}
+                    >
+                      {step.label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            <button
+              type="button"
+              className="mt-2 text-[11px] font-semibold text-ops-ink/40 hover:text-ops-accent"
+              onClick={() => setSelectedStep("AUTO")}
+            >
+              Remettre en automatique
+            </button>
+          </div>
+        ) : null}
+
         <form onSubmit={onSubmit} className="space-y-3">
           <label className="block text-sm font-medium text-ops-ink">
-            Code colis
+            {machineTest.phase === "listening" ? "Test douchette" : "Code colis"}
             <input
               ref={inputRef}
               data-scan-input="1"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => onScanInputChange(e.target.value)}
               autoFocus
               inputMode="text"
               autoComplete="off"
               spellCheck={false}
-              placeholder="Pointez le HENEX ici…"
-              disabled={busy}
-              className="mt-1.5 w-full rounded-xl border border-ops-card bg-ops-page px-4 py-3 text-center font-mono text-base outline-none ring-ops-accent focus:ring-2 disabled:opacity-60"
+              placeholder={
+                machineTest.phase === "listening"
+                  ? "Scannez un code pour tester…"
+                  : readyToScan
+                    ? "Pointez la douchette ici…"
+                    : stepNeedsLivreur
+                      ? "Choisissez le livreur pour cette étape"
+                      : "Choisissez un parcours d’abord"
+              }
+              disabled={busy && machineTest.phase !== "listening"}
+              className={cn(
+                "mt-1.5 w-full rounded-xl border bg-ops-page px-4 py-3 text-center font-mono text-base outline-none ring-ops-accent focus:ring-2 disabled:opacity-60",
+                machineTest.phase === "listening"
+                  ? "border-amber-500/50"
+                  : "border-ops-card",
+              )}
             />
           </label>
-          <Button type="submit" className="w-full" disabled={!code.trim() || busy}>
-            {busy ? "Lecture…" : "Lire le code"}
-          </Button>
+          {machineTest.phase === "listening" ? (
+            <p className="text-center text-xs text-ops-ink/45">
+              Dès que des caractères apparaissent, le test passe OK.
+            </p>
+          ) : (
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!code.trim() || busy || !readyToScan}
+            >
+              {busy ? "Lecture…" : "Lire le code"}
+            </Button>
+          )}
         </form>
 
-        {canMutate && bulkAction && (
-          <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-            <Zap className="h-4 w-4 shrink-0" />
-            <span className="flex-1">
-              Mode rapide : chaque scan → « {bulkAction.label} »
-            </span>
-            <button
-              type="button"
-              className="font-semibold underline"
-              onClick={() => setBulkAction(null)}
-            >
-              Arrêter
-            </button>
-          </div>
-        )}
-
-        {feedback && (
+        {feedback ? (
           <div
             className={cn(
               "flex items-start gap-3 rounded-xl border px-3 py-3 text-sm",
@@ -352,15 +1042,15 @@ export function ScannerPage({ role }: { role: AppRole }) {
             )}
             <div>
               <p className="font-semibold">{feedback.title}</p>
-              {feedback.detail && (
+              {feedback.detail ? (
                 <p className="mt-0.5 opacity-80">{feedback.detail}</p>
-              )}
+              ) : null}
             </div>
           </div>
-        )}
+        ) : null}
       </Panel>
 
-      {parcel && (
+      {parcel ? (
         <Panel className="space-y-4">
           <div className="flex items-start gap-3">
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-ops-card text-ops-accent">
@@ -374,8 +1064,15 @@ export function ScannerPage({ role }: { role: AppRole }) {
                 {parcel.recipientName} · {parcel.phone}
               </p>
               <p className="mt-1 text-sm text-ops-ink/55">
-                {parcel.address}, {parcel.city}
+                {parcel.city}
+                {parcel.zone?.name ? ` · ${parcel.zone.name}` : ""}
               </p>
+              {parcel.driver?.name ? (
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-ops-ink/45">
+                  <UserRound className="h-3.5 w-3.5" />
+                  Livreur : {parcel.driver.name}
+                </p>
+              ) : null}
             </div>
             <StatusPill status={parcel.status} />
           </div>
@@ -400,106 +1097,70 @@ export function ScannerPage({ role }: { role: AppRole }) {
             </div>
           </div>
 
-          {canMutate && actions.length > 0 && (
-            <div className="space-y-3 border-t border-ops-card pt-3">
+          <div className="space-y-3 border-t border-ops-card pt-3">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-ops-accent" />
               <p className="text-xs font-semibold uppercase tracking-wide text-ops-ink/45">
-                Actions possibles
+                Historique détaillé
               </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {actions.map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      if (action.needsComment) {
-                        setPendingAction(action);
-                        setFeedback({
-                          tone: "warn",
-                          title: action.label,
-                          detail:
-                            action.commentLabel ??
-                            "Saisissez un motif puis validez.",
-                        });
-                        return;
-                      }
-                      void applyStatus(parcel, action, "");
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      if (action.needsComment) {
-                        toast.info(
-                          "Mode rapide",
-                          "Choisissez une action sans motif obligatoire (ex. Entrée dépôt).",
-                        );
-                        return;
-                      }
-                      setBulkAction(action);
-                      toast.info(
-                        "Mode rapide",
-                        `Prochains scans → ${action.label}`,
-                      );
-                    }}
-                    className={cn(
-                      "rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition disabled:opacity-50",
-                      ACTION_TONE_CLASS[action.tone],
-                    )}
-                  >
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[11px] text-ops-ink/40">
-                Clic droit = mode rapide (même action à chaque scan).
-              </p>
+              <span className="ml-auto text-[11px] text-ops-ink/35">
+                {history.length} événement{history.length === 1 ? "" : "s"}
+              </span>
             </div>
-          )}
-
-          {pendingAction && canMutate && (
-            <div className="space-y-2 rounded-xl border border-ops-card bg-ops-page p-3">
-              <p className="text-sm font-semibold text-ops-ink">
-                {pendingAction.label}
-              </p>
-              <label className="block text-sm text-ops-ink/80">
-                {pendingAction.commentLabel ?? "Motif"}
-                <input
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  autoFocus
-                  className="mt-1.5 w-full rounded-xl border border-ops-card bg-ops-surface px-3 py-2 text-sm outline-none ring-ops-accent focus:ring-2"
-                  placeholder="Obligatoire"
-                />
-              </label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  className="flex-1"
-                  disabled={busy || !comment.trim()}
-                  onClick={() => void applyStatus(parcel, pendingAction, comment)}
-                >
-                  Valider
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setPendingAction(null);
-                    focusInput();
-                  }}
-                >
-                  Annuler
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {canMutate && actions.length === 0 && (
-            <p className="text-sm text-ops-ink/50">
-              Aucune action disponible pour ce statut.
-            </p>
-          )}
+            {history.length === 0 ? (
+              <p className="text-sm text-ops-ink/45">Aucun événement encore.</p>
+            ) : (
+              <ol className="relative space-y-0 border-l border-ops-card pl-4">
+                {history.map((entry, idx) => {
+                  const statusMeta = entry.status
+                    ? STATUS_META[entry.status as StatusKey]
+                    : null;
+                  return (
+                    <li key={`${entry.at}-${idx}`} className="relative pb-4 last:pb-0">
+                      <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-ops-accent ring-4 ring-ops-surface" />
+                      <div className="rounded-xl border border-ops-card bg-ops-page/50 px-3 py-2.5">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-ops-ink">
+                            {entry.label}
+                          </p>
+                          <time className="shrink-0 text-[11px] text-ops-ink/40">
+                            {formatWhen(entry.at)}
+                          </time>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ops-ink/50">
+                          {entry.actor ? (
+                            <span className="inline-flex items-center gap-1">
+                              <UserRound className="h-3 w-3" />
+                              {entry.actor}
+                            </span>
+                          ) : null}
+                          {statusMeta ? (
+                            <span
+                              className="rounded px-1.5 py-0.5 font-semibold"
+                              style={{
+                                background: statusMeta.color,
+                                color: statusMeta.ink ?? "#fff",
+                              }}
+                            >
+                              {statusMeta.label}
+                            </span>
+                          ) : null}
+                        </div>
+                        {entry.comment &&
+                        !entry.label.includes(entry.comment) ? (
+                          <p className="mt-1.5 text-[12px] leading-snug text-ops-ink/55">
+                            {entry.comment}
+                          </p>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
         </Panel>
-      )}
+      ) : null}
     </div>
   );
 }

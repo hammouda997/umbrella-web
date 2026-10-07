@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { cn } from "@/lib/cn";
@@ -9,31 +9,18 @@ import { cn } from "@/lib/cn";
 gsap.registerPlugin(useGSAP);
 
 type HeroVanSceneProps = {
-  /** Landing = full hero drive-in; portal = compact banner on the right. */
+  /** Landing = full hero drive-in; portal = banner media plane. */
   variant?: "landing" | "portal";
   className?: string;
 };
 
-/** Shared Umbrella van: one-shot drive-in (landing + portal heroes). */
+/** Shared Umbrella night van + brand mark (landing + portal heroes). */
 export function HeroVanScene({
   variant = "landing",
   className,
 }: HeroVanSceneProps) {
   const root = useRef<HTMLDivElement>(null);
   const isPortal = variant === "portal";
-  const [parkLeft, setParkLeft] = useState(isPortal ? "88%" : "52%");
-
-  useEffect(() => {
-    if (!isPortal) {
-      setParkLeft("52%");
-      return;
-    }
-    const mq = window.matchMedia("(min-width: 640px)");
-    const sync = () => setParkLeft(mq.matches ? "68%" : "92%");
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, [isPortal]);
 
   useGSAP(
     () => {
@@ -44,29 +31,23 @@ export function HeroVanScene({
       if (!van) return;
 
       if (reduce) {
-        gsap.set(van, { left: parkLeft, xPercent: -50, rotate: 0 });
+        gsap.set(van, { x: 0, autoAlpha: 1, scale: 1 });
         return;
       }
 
-      gsap.set(van, {
-        left: "118%",
-        xPercent: -50,
-        rotate: 0,
-        transformOrigin: "50% 88%",
-      });
-
-      const enter = gsap.timeline({ defaults: { ease: "power2.out" } });
-      enter
-        .fromTo(
-          van,
-          { left: "118%", rotate: 0 },
-          { left: parkLeft, duration: isPortal ? 1.55 : 2.05 },
-        )
-        .to(van, { rotate: -1.6, duration: 0.14, ease: "power3.in" })
-        .to(van, { rotate: 0.3, duration: 0.18, ease: "power2.out" })
-        .to(van, { rotate: 0, duration: 0.24, ease: "power2.inOut" });
+      gsap.fromTo(
+        van,
+        { x: isPortal ? "12%" : "18%", autoAlpha: 0.85, scale: 1.04 },
+        {
+          x: 0,
+          autoAlpha: 1,
+          scale: 1,
+          duration: isPortal ? 1.25 : 1.9,
+          ease: "power2.out",
+        },
+      );
     },
-    { scope: root, dependencies: [parkLeft, isPortal] },
+    { scope: root, dependencies: [isPortal] },
   );
 
   return (
@@ -79,22 +60,59 @@ export function HeroVanScene({
       )}
       aria-hidden
     >
-      <div
-        className={cn(
-          "hero-van absolute bottom-0 will-change-transform",
-          isPortal
-            ? "w-[min(70%,260px)] opacity-55 sm:w-[min(58%,340px)] sm:opacity-80 lg:w-[min(50%,400px)] lg:opacity-100"
-            : "w-[min(95%,540px)] lg:bottom-2",
-        )}
-      >
-        <div className="relative aspect-[1017/468] w-full">
+      <div className="hero-van absolute inset-0 will-change-transform">
+        <div
+          className="absolute inset-0"
+          style={
+            isPortal
+              ? {
+                  WebkitMaskImage:
+                    "linear-gradient(90deg, transparent 0%, transparent 18%, rgba(0,0,0,0.35) 34%, rgba(0,0,0,0.85) 48%, #000 62%, #000 100%)",
+                  maskImage:
+                    "linear-gradient(90deg, transparent 0%, transparent 18%, rgba(0,0,0,0.35) 34%, rgba(0,0,0,0.85) 48%, #000 62%, #000 100%)",
+                }
+              : {
+                  WebkitMaskImage:
+                    "linear-gradient(90deg, transparent 0%, transparent 8%, rgba(0,0,0,0.45) 28%, #000 48%, #000 100%)",
+                  maskImage:
+                    "linear-gradient(90deg, transparent 0%, transparent 8%, rgba(0,0,0,0.45) 28%, #000 48%, #000 100%)",
+                }
+          }
+        >
           <Image
-            src="/assets/hero-van-v9.png"
+            src="/assets/hero-van-night.jpg"
             alt=""
             fill
             priority
-            sizes={isPortal ? "(max-width: 640px) 260px, 400px" : "540px"}
-            className="object-contain object-bottom"
+            sizes="100vw"
+            className={cn(
+              "object-cover",
+              isPortal
+                ? "object-[72%_52%] sm:object-[68%_50%]"
+                : "object-[70%_48%] lg:object-[62%_46%]",
+            )}
+          />
+        </div>
+
+        <div
+          className={cn(
+            "pointer-events-none absolute flex items-center justify-center",
+            isPortal
+              ? "bottom-[34%] left-[48%] right-[10%] top-[28%] sm:left-[50%] sm:right-[12%] lg:left-[52%] lg:right-[14%]"
+              : "bottom-[36%] left-[42%] right-[8%] top-[30%] sm:left-[46%] lg:left-[48%] lg:right-[10%] lg:top-[28%] lg:bottom-[34%]",
+          )}
+        >
+          <Image
+            src="/logo-umbrella.png"
+            alt=""
+            width={360}
+            height={150}
+            className={cn(
+              "h-auto w-full object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.65)]",
+              isPortal
+                ? "max-w-[150px] sm:max-w-[190px] lg:max-w-[220px]"
+                : "max-w-[180px] sm:max-w-[240px] lg:max-w-[300px]",
+            )}
           />
         </div>
       </div>

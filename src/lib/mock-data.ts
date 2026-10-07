@@ -1,5 +1,12 @@
 import type { AppRole } from "@/lib/roles";
-import type { Agency, Parcel, Payment, Ticket, Zone } from "@/lib/domain";
+import type {
+  Agency,
+  ApprovalStatus,
+  Parcel,
+  Payment,
+  Ticket,
+  Zone,
+} from "@/lib/domain";
 
 /** Seed dataset for demo mode. Kept identical to umbrella/api/prisma/seed.ts. */
 
@@ -12,6 +19,14 @@ export type MockUser = {
   password: string;
   isActive: boolean;
   agencyId?: number | null;
+  zoneId?: number | null;
+  approvalStatus?: ApprovalStatus;
+  governorate?: string | null;
+  city?: string | null;
+  address?: string | null;
+  shopName?: string | null;
+  productTypes?: string[];
+  productNotes?: string | null;
   createdAt?: string;
 };
 
@@ -32,6 +47,7 @@ export const MOCK_USERS: MockUser[] = [
     phone: "20000001",
     password: "Super@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
   },
   {
     id: 2,
@@ -41,15 +57,22 @@ export const MOCK_USERS: MockUser[] = [
     phone: "20000000",
     password: "Admin@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
   },
   {
     id: 3,
     name: "Demo Expéditeur",
     email: "expediteur@umbrella.tn",
     role: "EXPEDITEUR",
-    phone: "21000000",
+    phone: "57120677",
     password: "Expediteur@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
+    shopName: "Demo Boutique",
+    productTypes: ["Vêtements", "Accessoires"],
+    governorate: "Tunis",
+    city: "Tunis",
+    address: "12 Avenue Habib Bourguiba",
   },
   {
     id: 4,
@@ -59,15 +82,21 @@ export const MOCK_USERS: MockUser[] = [
     phone: "22000000",
     password: "Livreur@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
+    zoneId: 1,
+    governorate: "Tunis",
+    city: "La Marsa",
+    address: "Route de La Marsa",
   },
   {
     id: 5,
     name: "Demo Client",
     email: "client@umbrella.tn",
     role: "CLIENT",
-    phone: "51971675",
+    phone: "51926850",
     password: "Client@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
   },
   {
     id: 6,
@@ -77,6 +106,11 @@ export const MOCK_USERS: MockUser[] = [
     phone: "22000001",
     password: "Livreur@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
+    zoneId: 1,
+    governorate: "Tunis",
+    city: "Ariana",
+    address: "Cité Ennasr",
   },
   {
     id: 7,
@@ -86,6 +120,7 @@ export const MOCK_USERS: MockUser[] = [
     phone: "23000001",
     password: "Chef@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
     agencyId: 1,
   },
   {
@@ -96,6 +131,7 @@ export const MOCK_USERS: MockUser[] = [
     phone: "23000002",
     password: "Support@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
     agencyId: 1,
   },
   {
@@ -106,6 +142,7 @@ export const MOCK_USERS: MockUser[] = [
     phone: "23000003",
     password: "Pickup@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
     agencyId: 1,
   },
   {
@@ -116,6 +153,7 @@ export const MOCK_USERS: MockUser[] = [
     phone: "23000004",
     password: "Magasin@12345",
     isActive: true,
+    approvalStatus: "APPROVED",
     agencyId: 1,
   },
 ];
@@ -150,11 +188,11 @@ const day = (offset: number) => {
 export const MOCK_ZONES: MockZone[] = [
   {
     id: 1,
-    name: "Zone A",
-    governorate: null,
+    name: "Zone Tunis",
+    governorate: "Tunis",
     centerLat: null,
     centerLng: null,
-    radiusKm: null,
+    radiusKm: 20,
     isActive: true,
   },
   {
@@ -182,7 +220,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 1,
     code: "UMB-ATT-001",
     recipientName: "Demo Client",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Ariana",
     city: "Ariana",
     address: "Cité Ennasr 2",
@@ -203,7 +241,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 2,
     code: "UMB-COURS-001",
     recipientName: "Demo Client",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Tunis",
     city: "Tunis",
     address: "Avenue Habib Bourguiba 12",
@@ -228,7 +266,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 3,
     code: "UMB-LIV-001",
     recipientName: "Demo Client",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Tunis",
     city: "La Marsa",
     address: "Corniche",
@@ -252,7 +290,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 4,
     code: "UMB-ENL-001",
     recipientName: "Amira Trabelsi",
-    phone: "98765432",
+    phone: "51926850",
     governorate: "Ben Arous",
     city: "Ezzahra",
     address: "Avenue Habib Bourguiba",
@@ -271,7 +309,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 5,
     code: "UMB-ECH-001",
     recipientName: "Demo Client",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Mahdia",
     city: "Ksour Essaf",
     address: "Rue 54 Amilcar",
@@ -289,7 +327,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 6,
     code: "UMB-DEP-001",
     recipientName: "Hedi Mansouri",
-    phone: "98765432",
+    phone: "51926850",
     governorate: "Sfax",
     city: "Sfax",
     address: "Route de Gabès km 3",
@@ -308,7 +346,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 7,
     code: "UMB-EXT-001",
     recipientName: "Sami Gharbi",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Sousse",
     city: "Sousse",
     address: "Boulevard 14 Janvier",
@@ -324,7 +362,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 8,
     code: "UMB-RET-001",
     recipientName: "Inconnu",
-    phone: "50001122",
+    phone: "51926850",
     governorate: "Kairouan",
     city: "Kairouan",
     address: "Adresse incomplete",
@@ -340,7 +378,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 9,
     code: "UMB-LIVP-001",
     recipientName: "Demo Client",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Ariana",
     city: "Raoued",
     address: "Route de Bizerte",
@@ -356,7 +394,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 10,
     code: "UMB-VERIF-001",
     recipientName: "Nour Ben Ali",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Bizerte",
     city: "Bizerte",
     address: "Avenue Habib Thameur",
@@ -372,7 +410,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 11,
     code: "UMB-LIV-002",
     recipientName: "Salma Jebali",
-    phone: "98765123",
+    phone: "51926850",
     governorate: "Tunis",
     city: "Le Bardo",
     address: "Avenue de la République",
@@ -391,7 +429,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 12,
     code: "UMB-LIV-003",
     recipientName: "Youssef Khelifi",
-    phone: "55443322",
+    phone: "51926850",
     governorate: "Nabeul",
     city: "Hammamet",
     address: "Zone touristique",
@@ -410,7 +448,7 @@ export const MOCK_PARCELS: MockParcel[] = [
     id: 13,
     code: "UMB-LIVP-002",
     recipientName: "Demo Client",
-    phone: "51971675",
+    phone: "51926850",
     governorate: "Ben Arous",
     city: "Rades",
     address: "Cité El Amal",
@@ -421,6 +459,50 @@ export const MOCK_PARCELS: MockParcel[] = [
     bordereauUrl: null,
     createdAt: day(3),
     senderId: 3,
+  },
+  {
+    id: 14,
+    code: "UMB-LIFE-001",
+    recipientName: "Sana Mejri",
+    phone: "51926850",
+    governorate: "Tunis",
+    city: "Tunis",
+    address: "Centre ville — demo cycle livraison",
+    price: 35,
+    notes: "Demo cycle 1 (livraison)",
+    designation: "Demo lifecycle",
+    status: "EN_ATTENTE",
+    mode: "INTERNAL",
+    bordereauUrl: null,
+    createdAt: day(0),
+    senderId: 3,
+    zone: { id: 1, name: "Zone A" },
+    timeline: [{ at: day(0), label: "Colis créé" }],
+  },
+  {
+    id: 15,
+    code: "UMB-LIFE-002",
+    recipientName: "Karim Ayari",
+    phone: "51926850",
+    governorate: "Tunis",
+    city: "Tunis",
+    address: "Lac 2 — demo cycle retour",
+    price: 42,
+    notes: "Demo cycle 2 (annulation / retour)",
+    designation: "Demo return lifecycle",
+    status: "EN_COURS",
+    mode: "INTERNAL",
+    bordereauUrl: null,
+    createdAt: day(0),
+    senderId: 3,
+    driverId: 4,
+    driver: { id: 4, name: "Demo Livreur" },
+    zone: { id: 1, name: "Zone A" },
+    timeline: [
+      { at: day(2), label: "Colis créé" },
+      { at: day(1), label: "Arrivé au dépôt" },
+      { at: day(0), label: "En cours de livraison" },
+    ],
   },
 ];
 

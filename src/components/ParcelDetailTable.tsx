@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -14,8 +14,6 @@ import {
   Button,
   EmptyState,
   SearchInput,
-  StatusBadge,
-  TableCard,
   tableClass,
   tdClass,
   theadClass,
@@ -24,9 +22,14 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatTnd, type Parcel } from "@/lib/domain";
-import { downloadParcelsExcel, openBordereauPdf, openParcelListPdf } from "@/lib/parcel-report";
+import {
+  downloadParcelsExcel,
+  openBordereauPdf,
+  openParcelListPdf,
+} from "@/lib/parcel-report";
 import { useAuth } from "@/lib/auth-context";
 import { canSeeDeliveryMode } from "@/lib/roles";
+import { dispatchLabel, isDispatched } from "@/lib/parcel-parcours";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
 import { compareSortValues, SortableTh, type SortDir } from "@/lib/table-sort";
 
@@ -34,7 +37,7 @@ export type DetailParcel = Parcel;
 
 type SortKey = "code" | "recipientName" | "price" | "createdAt" | "status";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 const PARCEL_SORT = {
   code: (p: Parcel) => p.code ?? "",
@@ -50,6 +53,21 @@ function formatDate(iso: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+function QuietStatus({ status }: { status: string }) {
+  const meta = STATUS_META[status as StatusKey];
+  const color = meta?.color ?? "#64748b";
+  return (
+    <span className="inline-flex items-center gap-2 text-[12px] font-semibold text-ops-ink">
+      <span
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: color }}
+        aria-hidden
+      />
+      {meta?.label ?? status}
+    </span>
+  );
 }
 
 export function ParcelDetailTable({
@@ -76,6 +94,7 @@ export function ParcelDetailTable({
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [groupByZone, setGroupByZone] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -91,6 +110,8 @@ export function ParcelDetailTable({
             r.notes,
             r.designation,
             r.zone?.name,
+            r.driver?.name,
+            r.sender?.name,
             STATUS_META[r.status as StatusKey]?.label ?? r.status,
             String(r.price),
           ]
@@ -102,17 +123,19 @@ export function ParcelDetailTable({
     const dir = sortDir === "asc" ? 1 : -1;
     const read = PARCEL_SORT[sortKey];
     list.sort((a, b) => {
-      const za = a.zone?.name?.trim() || "\uffff";
-      const zb = b.zone?.name?.trim() || "\uffff";
-      const byZone = za.localeCompare(zb, "fr", { sensitivity: "base" });
-      if (byZone !== 0) return byZone;
+      if (groupByZone) {
+        const za = a.zone?.name?.trim() || "\uffff";
+        const zb = b.zone?.name?.trim() || "\uffff";
+        const byZone = za.localeCompare(zb, "fr", { sensitivity: "base" });
+        if (byZone !== 0) return byZone;
+      }
       return dir * compareSortValues(read(a), read(b));
     });
     return list;
-  }, [rows, query, sortKey, sortDir]);
+  }, [rows, query, sortKey, sortDir, groupByZone]);
 
   function zoneKey(row: Parcel) {
-    return row.zone?.id ?? row.zoneId ?? "none";
+    return String(row.zone?.id ?? row.zoneId ?? "none");
   }
 
   function zoneLabel(row: Parcel) {
@@ -121,7 +144,10 @@ export function ParcelDetailTable({
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageRows = filtered.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
   const firstIndex = filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
   const lastIndex = (currentPage - 1) * PAGE_SIZE + pageRows.length;
 
@@ -146,7 +172,9 @@ export function ParcelDetailTable({
   }
 
   function exportExcel() {
-    downloadParcelsExcel(filtered, `umbrella-${reportSlug()}`, { includeMode: showModes });
+    downloadParcelsExcel(filtered, `umbrella-${reportSlug()}`, {
+      includeMode: showModes,
+    });
   }
 
   function exportPdf() {
@@ -158,7 +186,10 @@ export function ParcelDetailTable({
         includeMode: showModes,
       });
     } catch (err) {
-      toast.error("Export PDF impossible", err instanceof Error ? err.message : undefined);
+      toast.error(
+        "Export PDF impossible",
+        err instanceof Error ? err.message : undefined,
+      );
     }
   }
 
@@ -170,187 +201,83 @@ export function ParcelDetailTable({
     try {
       openBordereauPdf(row, { includeMode: showModes });
     } catch (err) {
-      toast.error("Bordereau impossible", err instanceof Error ? err.message : undefined);
+      toast.error(
+        "Bordereau impossible",
+        err instanceof Error ? err.message : undefined,
+      );
     }
   }
 
-  function codeCell(row: Parcel) {
-    return detailBasePath ? (
-      <Link
-        href={`${detailBasePath}/${row.id}`}
-        className="font-mono text-xs font-semibold text-ops-accent hover:underline"
-      >
-        {row.code ?? `#${row.id}`}
-      </Link>
-    ) : (
-      <span className="font-mono text-xs font-semibold text-ops-ink">
-        {row.code ?? `#${row.id}`}
-      </span>
-    );
-  }
-
-  function rowActions(row: Parcel) {
-    const editable = onEdit && (canEditRow ? canEditRow(row) : true);
-    return (
-      <div className="flex items-center justify-end gap-1.5">
-        <button
-          type="button"
-          title="Imprimer le bordereau"
-          aria-label={`Imprimer le bordereau ${row.code ?? row.id}`}
-          onClick={() => printBordereau(row)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-ops-card text-ops-ink/45 transition hover:border-ops-accent/50 hover:text-ops-accent"
-        >
-          <Printer className="h-4 w-4" />
-        </button>
-        {onEdit ? (
-          <button
-            type="button"
-            title={editable ? "Modifier" : "Seuls les colis en attente sont modifiables"}
-            aria-label={`Modifier ${row.code ?? row.id}`}
-            disabled={!editable}
-            onClick={() => onEdit(row)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-ops-card text-ops-ink/45 transition hover:border-ops-accent/50 hover:text-ops-accent disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-        ) : null}
-      </div>
-    );
-  }
-
-  const toolbar = (
-    <>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={exportExcel}>
-          Excel
-        </Button>
-        <Button variant="secondary" size="sm" icon={FileText} onClick={exportPdf}>
-          PDF
-        </Button>
-      </div>
-      <SearchInput
-        value={query}
-        onChange={(value) => {
-          setQuery(value);
-          setPage(1);
-        }}
-        placeholder="Code, nom, zone, téléphone…"
-        className="w-full md:w-72"
-      />
-    </>
-  );
-
-  function zoneHeader(row: Parcel, index: number, list: Parcel[]) {
-    const prev = index > 0 ? list[index - 1] : null;
-    if (prev && zoneKey(prev) === zoneKey(row)) return null;
-    const count = filtered.filter((r) => zoneKey(r) === zoneKey(row)).length;
-    return (
-      <div className="flex items-center justify-between gap-2 border-b border-ops-card bg-ops-page/70 px-4 py-2">
-        <p className="text-xs font-bold uppercase tracking-[0.1em] text-ops-ink">
-          {zoneLabel(row)}
-        </p>
-        <span className="text-[11px] font-semibold text-ops-ink/45">
-          {count} colis
-        </span>
-      </div>
-    );
-  }
-
-  const footer = (
-    <div className="flex flex-col gap-3 text-xs text-ops-ink/45 sm:flex-row sm:items-center sm:justify-between">
-      <p>
-        {filtered.length === 0
-          ? "Aucun résultat"
-          : `${firstIndex}–${lastIndex} sur ${filtered.length} colis`}
-      </p>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={currentPage <= 1}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          Précédent
-        </Button>
-        <span className="min-w-[4rem] text-center font-semibold text-ops-ink">
-          {currentPage} / {totalPages}
-        </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={currentPage >= totalPages}
-          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-        >
-          Suivant
-        </Button>
-      </div>
-    </div>
-  );
-
-  if (loading) {
-    return (
-      <TableCard toolbar={toolbar}>
-        <div className="space-y-2 p-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-12 animate-pulse rounded-xl bg-ops-ink/[0.06]" />
-          ))}
-        </div>
-      </TableCard>
-    );
-  }
+  const colSpan = showPartyDetails ? 8 : 7;
 
   return (
-    <TableCard toolbar={toolbar} footer={filtered.length > PAGE_SIZE || query ? footer : undefined}>
-      {pageRows.length === 0 ? (
-        <div className="p-6">
+    <section className="overflow-hidden rounded-2xl border border-ops-card bg-ops-surface">
+      <div className="flex flex-col gap-3 border-b border-ops-card px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={FileSpreadsheet}
+            onClick={exportExcel}
+          >
+            Excel
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={FileText}
+            onClick={exportPdf}
+          >
+            PDF
+          </Button>
+          <button
+            type="button"
+            onClick={() => setGroupByZone((v) => !v)}
+            className={cn(
+              "rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition",
+              groupByZone
+                ? "border-ops-accent/40 bg-ops-accent/10 text-ops-accent"
+                : "border-ops-card text-ops-ink/50 hover:text-ops-ink",
+            )}
+          >
+            Grouper par zone
+          </button>
+        </div>
+        <SearchInput
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            setPage(1);
+          }}
+          placeholder="Rechercher…"
+          className="w-full lg:w-64"
+        />
+      </div>
+
+      {loading ? (
+        <div className="space-y-2 p-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-10 animate-pulse rounded-lg bg-ops-ink/[0.06]"
+            />
+          ))}
+        </div>
+      ) : pageRows.length === 0 ? (
+        <div className="p-10">
           <EmptyState
             icon={Package}
-            title={query ? "Aucun colis ne correspond" : "Aucun colis"}
+            title={query ? "Aucun résultat" : "Aucun colis"}
             description={
-              query ? "Essayez un autre code, nom ou téléphone." : "Les colis apparaîtront ici."
+              query
+                ? "Modifiez votre recherche."
+                : "Les colis apparaîtront ici."
             }
           />
         </div>
       ) : (
-        <>
-          <ul className="md:hidden">
-            {pageRows.map((row, index) => (
-              <li key={row.id}>
-                {zoneHeader(row, index, pageRows)}
-                <div className="space-y-2 border-b border-ops-card px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      {codeCell(row)}
-                      <p className="truncate font-semibold text-ops-ink">
-                        {row.recipientName}
-                      </p>
-                      <p className="truncate text-xs text-ops-ink/45">
-                        {row.city}, {row.governorate} · {row.phone}
-                      </p>
-                      {showPartyDetails ? (
-                        <p className="mt-1 text-[11px] text-ops-ink/55">
-                          Exp. {row.sender?.name ?? "—"}
-                          {row.sender?.phone ? ` · ${row.sender.phone}` : ""}
-                          {" · "}
-                          Liv. {row.driver?.name ?? "—"}
-                          {row.driver?.phone ? ` · ${row.driver.phone}` : ""}
-                        </p>
-                      ) : null}
-                    </div>
-                    <StatusBadge status={row.status} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold text-ops-ink">
-                      {formatTnd(row.price)}
-                    </p>
-                    {rowActions(row)}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <table className={cn(tableClass, "hidden md:table")}>
+        <div className="overflow-x-auto">
+          <table className={tableClass}>
             <thead className={theadClass}>
               <tr>
                 <SortableTh
@@ -361,18 +288,16 @@ export function ParcelDetailTable({
                   onSort={toggleSort}
                 />
                 <SortableTh
-                  label="Destinataire"
+                  label="Client"
                   column="recipientName"
                   activeKey={sortKey}
                   sortDir={sortDir}
                   onSort={toggleSort}
                 />
                 {showPartyDetails ? (
-                  <>
-                    <th className={thClass}>Expéditeur</th>
-                    <th className={thClass}>Livreur</th>
-                  </>
+                  <th className={cn(thClass, "py-2")}>Expéditeur</th>
                 ) : null}
+                <th className={cn(thClass, "py-2")}>Livreur</th>
                 <SortableTh
                   label="Statut"
                   column="status"
@@ -390,98 +315,192 @@ export function ParcelDetailTable({
                   buttonClassName="ml-auto"
                 />
                 <SortableTh
-                  label="Ajouté le"
+                  label="Date"
                   column="createdAt"
                   activeKey={sortKey}
                   sortDir={sortDir}
                   onSort={toggleSort}
+                  className="hidden sm:table-cell"
                 />
-                <th className={thClass}>Désignation</th>
-                <th className={cn(thClass, "text-right")}>Actions</th>
+                <th className={cn(thClass, "py-2 text-right")}> </th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((row, index) => {
                 const showZone =
-                  index === 0 || zoneKey(pageRows[index - 1]!) !== zoneKey(row);
-                const zoneCount = filtered.filter((r) => zoneKey(r) === zoneKey(row)).length;
+                  groupByZone &&
+                  (index === 0 ||
+                    zoneKey(pageRows[index - 1]!) !== zoneKey(row));
+                const zoneCount = filtered.filter(
+                  (r) => zoneKey(r) === zoneKey(row),
+                ).length;
+                const editable =
+                  onEdit && (canEditRow ? canEditRow(row) : true);
                 return (
                   <Fragment key={row.id}>
                     {showZone ? (
-                      <tr className="bg-ops-page/70">
+                      <tr>
                         <td
-                          colSpan={showPartyDetails ? 9 : 7}
-                          className="border-b border-ops-card px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-ops-ink"
+                          colSpan={colSpan}
+                          className="bg-ops-page/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ops-ink/40"
                         >
                           {zoneLabel(row)}
-                          <span className="ml-2 font-semibold normal-case tracking-normal text-ops-ink/45">
-                            · {zoneCount} colis
+                          <span className="ml-1.5 font-medium normal-case tracking-normal text-ops-ink/28">
+                            {zoneCount}
                           </span>
                         </td>
                       </tr>
                     ) : null}
                     <tr className={trClass}>
-                      <td className={tdClass}>
-                        {codeCell(row)}
+                      <td className={cn(tdClass, "whitespace-nowrap px-3 py-2")}>
+                        {detailBasePath ? (
+                          <Link
+                            href={`${detailBasePath}/${row.id}`}
+                            className="font-mono text-[12px] font-semibold text-ops-ink hover:text-ops-accent"
+                          >
+                            {row.code ?? `#${row.id}`}
+                          </Link>
+                        ) : (
+                          <span className="font-mono text-[12px] font-semibold text-ops-ink">
+                            {row.code ?? `#${row.id}`}
+                          </span>
+                        )}
                         {showModes ? (
-                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-ops-ink/40">
-                            {row.mode}
+                          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-ops-ink/30">
+                            {row.mode === "INTERNAL" ? "Umbrella" : "Navex"}
                           </p>
                         ) : null}
                       </td>
-                      <td className={tdClass}>
-                        <p className="font-semibold text-ops-ink">{row.recipientName}</p>
-                        <p className="text-xs text-ops-ink/45">{row.phone}</p>
-                        <p className="max-w-xs truncate text-xs text-ops-ink/45">
-                          {row.address}, {row.city} · {row.governorate}
+                      <td className={cn(tdClass, "min-w-[10rem] px-3 py-2")}>
+                        <p className="truncate text-[13px] font-semibold text-ops-ink">
+                          {row.recipientName}
+                        </p>
+                        <p className="truncate text-[11px] text-ops-ink/40">
+                          {row.phone}
+                          <span className="mx-1 text-ops-ink/20">·</span>
+                          {row.city}
                         </p>
                       </td>
                       {showPartyDetails ? (
-                        <>
-                          <td className={tdClass}>
-                            <p className="font-medium text-ops-ink">
-                              {row.sender?.name ?? "—"}
-                            </p>
-                            <p className="text-xs text-ops-ink/45">
-                              {row.sender?.phone ?? row.sender?.email ?? ""}
-                            </p>
-                          </td>
-                          <td className={tdClass}>
-                            <p className="font-medium text-ops-ink">
-                              {row.driver?.name ?? "—"}
-                            </p>
-                            <p className="text-xs text-ops-ink/45">
-                              {row.driver?.phone ?? ""}
-                            </p>
-                          </td>
-                        </>
+                        <td className={cn(tdClass, "px-3 py-2 text-ops-ink/65")}>
+                          {row.sender?.name ?? "—"}
+                        </td>
                       ) : null}
-                      <td className={tdClass}>
-                        <StatusBadge status={row.status} />
+                      <td className={cn(tdClass, "min-w-[8rem] px-3 py-2")}>
+                        <p className="truncate text-[12px] font-semibold text-ops-ink">
+                          {row.driver?.name ?? "—"}
+                        </p>
+                        <p
+                          className={cn(
+                            "truncate text-[10px] font-medium",
+                            isDispatched(row)
+                              ? "text-emerald-600 dark:text-emerald-300/80"
+                              : "text-ops-ink/35",
+                          )}
+                        >
+                          {dispatchLabel(row)}
+                        </p>
+                      </td>
+                      <td className={cn(tdClass, "whitespace-nowrap px-3 py-2")}>
+                        <QuietStatus status={row.status} />
                       </td>
                       <td
                         className={cn(
                           tdClass,
-                          "whitespace-nowrap text-right font-semibold text-ops-ink",
+                          "whitespace-nowrap px-3 py-2 text-right text-[13px] font-semibold tabular-nums text-ops-ink",
                         )}
                       >
                         {formatTnd(row.price)}
                       </td>
-                      <td className={cn(tdClass, "whitespace-nowrap text-ops-ink/45")}>
+                      <td
+                        className={cn(
+                          tdClass,
+                          "hidden whitespace-nowrap px-3 py-2 text-ops-ink/40 sm:table-cell",
+                        )}
+                      >
                         {formatDate(row.createdAt)}
                       </td>
-                      <td className={cn(tdClass, "max-w-[12rem] truncate text-ops-ink")}>
-                        {row.designation ?? row.notes ?? "—"}
+                      <td className={cn(tdClass, "px-2 py-2")}>
+                        <div className="flex items-center justify-end gap-0.5">
+                          <IconBtn
+                            label="Bordereau"
+                            onClick={() => printBordereau(row)}
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </IconBtn>
+                          {onEdit ? (
+                            <IconBtn
+                              label="Modifier"
+                              disabled={!editable}
+                              onClick={() => onEdit(row)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </IconBtn>
+                          ) : null}
+                        </div>
                       </td>
-                      <td className={tdClass}>{rowActions(row)}</td>
                     </tr>
                   </Fragment>
                 );
               })}
             </tbody>
           </table>
-        </>
+        </div>
       )}
-    </TableCard>
+
+      {!loading && filtered.length > 0 ? (
+        <div className="flex flex-col gap-3 border-t border-ops-card px-4 py-3 text-[12px] text-ops-ink/45 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            {firstIndex}–{lastIndex} / {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Précédent
+            </Button>
+            <span className="min-w-[3.5rem] text-center font-semibold text-ops-ink">
+              {currentPage}/{totalPages}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function IconBtn({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ops-ink/35 transition hover:bg-ops-ink/[0.06] hover:text-ops-ink disabled:cursor-not-allowed disabled:opacity-30"
+    >
+      {children}
+    </button>
   );
 }

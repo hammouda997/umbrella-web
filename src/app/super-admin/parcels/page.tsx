@@ -12,6 +12,7 @@ function Body() {
       title="Tous les colis"
       description="Périmètre plateforme"
       detailBasePath="/super-admin/parcels"
+      showPartyDetails
     />
   );
 }

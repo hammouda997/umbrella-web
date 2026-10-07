@@ -1,11 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PackageSearch } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { STATUS_META, type StatusKey } from "@/lib/status-meta";
+import { trackingStepsFor } from "@/lib/tracking-lifecycle";
 import { EmptyState, LoadingBlock } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 type TrackResult = {
   code: string | null;
@@ -16,27 +18,6 @@ type TrackResult = {
   updatedAt: string;
   timeline?: Array<{ at: string; label: string }>;
 };
-
-const DEFAULT_STEPS = [
-  "Créé",
-  "Enlevé",
-  "Au dépôt",
-  "En livraison",
-  "Livré",
-];
-
-function statusStepIndex(status: string): number {
-  const map: Record<string, number> = {
-    NOUVEAU: 0,
-    ENLEVE: 1,
-    AU_DEPOT: 2,
-    EN_LIVRAISON: 3,
-    LIVRE: 4,
-    RETOUR: 2,
-    ANNULE: -1,
-  };
-  return map[status] ?? 1;
-}
 
 export function PublicTrackForm({ initialCode = "" }: { initialCode?: string }) {
   const [code, setCode] = useState(initialCode);
@@ -78,7 +59,10 @@ export function PublicTrackForm({ initialCode = "" }: { initialCode?: string }) 
       ? STATUS_META[result.status as StatusKey].label
       : result?.status;
 
-  const step = result ? statusStepIndex(result.status) : -1;
+  const trackSteps = useMemo(
+    () => (result ? trackingStepsFor(result.status) : []),
+    [result],
+  );
 
   return (
     <div className="mx-auto w-full max-w-lg space-y-6">
@@ -152,29 +136,33 @@ export function PublicTrackForm({ initialCode = "" }: { initialCode?: string }) 
           </div>
 
           <div className="px-6 py-5">
-            <ol className="flex justify-between gap-1">
-              {DEFAULT_STEPS.map((label, i) => {
-                const done = step >= 0 && i <= step;
-                return (
-                  <li
-                    key={label}
-                    className="flex flex-1 flex-col items-center text-center"
+            <ol className="space-y-2.5">
+              {trackSteps.map((s) => (
+                <li key={s.key} className="flex items-start gap-3">
+                  <span
+                    className={cn(
+                      "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
+                      s.current
+                        ? "bg-brand ring-4 ring-brand/20"
+                        : s.done
+                          ? "bg-brand"
+                          : "bg-cream-soft",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-sm",
+                      s.current
+                        ? "font-semibold text-ink"
+                        : s.done
+                          ? "text-ink"
+                          : "text-ink-muted",
+                    )}
                   >
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        done ? "bg-brand" : "bg-cream-soft"
-                      }`}
-                    />
-                    <span
-                      className={`mt-2 text-[10px] font-medium ${
-                        done ? "text-ink" : "text-ink-muted"
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  </li>
-                );
-              })}
+                    {s.label}
+                  </span>
+                </li>
+              ))}
             </ol>
 
             <dl className="mt-6 space-y-3 text-sm">

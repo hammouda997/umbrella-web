@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Pencil, UserPlus, Users } from "lucide-react";
+import { Check, Pencil, UserPlus, Users, X } from "lucide-react";
 import { errorText, useConfirm, useToast } from "@/components/Feedback";
 import { Modal } from "@/components/Modal";
 import {
@@ -24,7 +24,7 @@ import {
   type BadgeTone,
 } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
-import type { UserRow } from "@/lib/domain";
+import type { ApprovalStatus, UserRow } from "@/lib/domain";
 import type { Agency } from "@/lib/domain";
 import { ROLE_LABEL, roleNeedsAgency, type AppRole } from "@/lib/roles";
 import { SortableTh, useTableSort } from "@/lib/table-sort";
@@ -38,6 +38,18 @@ const USER_SORT = {
   role: (u: UserRow) => ROLE_LABEL[u.role],
   isActive: (u: UserRow) => (u.isActive ? 1 : 0),
 } as const;
+
+const APPROVAL_LABEL: Record<ApprovalStatus, string> = {
+  PENDING: "En attente",
+  APPROVED: "Approuvé",
+  REJECTED: "Refusé",
+};
+
+const APPROVAL_TONE: Record<ApprovalStatus, BadgeTone> = {
+  PENDING: "warning",
+  APPROVED: "success",
+  REJECTED: "danger",
+};
 
 const CREATABLE_ROLES: AppRole[] = [
   "SUPER_ADMIN",
@@ -64,9 +76,26 @@ const ROLE_TONE: Record<AppRole, BadgeTone> = {
 };
 
 type RoleFilter = "ALL" | AppRole;
+type ApprovalFilter = "ALL" | ApprovalStatus;
 type FormErrors = Partial<
   Record<"name" | "email" | "password" | "phone", string>
 >;
+
+function profileSummary(u: UserRow): string | null {
+  if (u.role === "EXPEDITEUR") {
+    const products = (u.productTypes ?? []).join(", ");
+    const place = [u.city, u.governorate].filter(Boolean).join(", ");
+    const parts = [products || null, place || null, u.address || null].filter(Boolean);
+    return parts.length ? parts.join(" · ") : null;
+  }
+  if (u.role === "LIVREUR") {
+    const zone = u.homeZone?.name ?? null;
+    const place = [u.city, u.governorate].filter(Boolean).join(", ");
+    const parts = [zone, place || null, u.address || null].filter(Boolean);
+    return parts.length ? parts.join(" · ") : null;
+  }
+  return null;
+}
 
 function validateCreate(form: FormData): FormErrors {
   const errors: FormErrors = {};
@@ -108,6 +137,7 @@ export function UsersManager({
   const users = useMemo(() => data ?? [], [data]);
   const agencies = useMemo(() => agenciesQuery.data ?? [], [agenciesQuery.data]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("ALL");
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>("ALL");
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
@@ -124,12 +154,21 @@ export function UsersManager({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return users.filter(
-      (u) =>
+    return users.filter((u) => {
+      const approval = u.approvalStatus ?? "APPROVED";
+      return (
         (roleFilter === "ALL" || u.role === roleFilter) &&
-        (!q || [u.name, u.email, u.phone].join(" ").toLowerCase().includes(q)),
-    );
-  }, [users, roleFilter, query]);
+        (approvalFilter === "ALL" || approval === approvalFilter) &&
+        (!q ||
+          [u.name, u.email, u.phone, u.shopName, u.governorate, u.city]
+            .join(" ")
+            .toLowerCase()
+            .includes(q))
+      );
+    });
+  }, [users, roleFilter, approvalFilter, query]);
+
+  const pendingCount = users.filter((u) => (u.approvalStatus ?? "APPROVED") === "PENDING").length;
 
   const { sorted: visible, sortKey, sortDir, toggleSort } = useTableSort<
     UserRow,
@@ -238,13 +277,40 @@ export function UsersManager({
     }
   }
 
+  async function setApproval(user: UserRow, status: "APPROVED" | "REJECTED") {
+    if (status === "REJECTED") {
+      const ok = await confirm({
+        title: `Refuser ${user.name} ?`,
+        description: "Ce compte ne pourra plus se connecter.",
+        confirmLabel: "Refuser",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    setBusyId(user.id);
+    try {
+      await request(`/users/${user.id}/approval`, "PATCH", { status });
+      toast.success(
+        status === "APPROVED" ? "Compte approuvé" : "Compte refusé",
+        user.name,
+      );
+      await reload();
+    } catch (err) {
+      toast.error("Vérification impossible", errorText(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const countFor = (role: AppRole) => users.filter((u) => u.role === role).length;
+  const countApproval = (status: ApprovalStatus) =>
+    users.filter((u) => (u.approvalStatus ?? "APPROVED") === status).length;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Utilisateurs"
-        description={`${users.length} compte(s) · ${users.filter((u) => !u.isActive).length} désactivé(s)`}
+        description={`${users.length} compte(s) · ${pendingCount} en attente · ${users.filter((u) => !u.isActive).length} désactivé(s)`}
         actions={
           <Button
             icon={UserPlus}
@@ -266,6 +332,29 @@ export function UsersManager({
       <TableCard
         toolbar={
           <>
+            <SegmentedTabs<ApprovalFilter>
+              label="Filtrer par vérification"
+              value={approvalFilter}
+              onChange={setApprovalFilter}
+              options={[
+                { value: "ALL", label: "Tous", count: users.length },
+                {
+                  value: "PENDING",
+                  label: "En attente",
+                  count: countApproval("PENDING"),
+                },
+                {
+                  value: "APPROVED",
+                  label: "Approuvés",
+                  count: countApproval("APPROVED"),
+                },
+                {
+                  value: "REJECTED",
+                  label: "Refusés",
+                  count: countApproval("REJECTED"),
+                },
+              ]}
+            />
             <SegmentedTabs<RoleFilter>
               label="Filtrer par rôle"
               value={roleFilter}
@@ -345,6 +434,12 @@ export function UsersManager({
               {visible.map((u) => {
                 const isSelf = u.id === session?.user.id;
                 const editable = canEdit(u);
+                const approval = (u.approvalStatus ?? "APPROVED") as ApprovalStatus;
+                const summary = profileSummary(u);
+                const canVerify =
+                  editable &&
+                  !isSelf &&
+                  (u.role === "EXPEDITEUR" || u.role === "LIVREUR");
                 return (
                   <tr key={u.id} className={trClass}>
                     <td className={tdClass}>
@@ -362,6 +457,11 @@ export function UsersManager({
                           <p className="truncate text-xs text-ops-ink/50">
                             {u.email}
                           </p>
+                          {summary ? (
+                            <p className="mt-0.5 line-clamp-2 text-[11px] text-ops-ink/45">
+                              {summary}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -379,14 +479,57 @@ export function UsersManager({
                           {u.agency.name}
                         </p>
                       ) : null}
+                      {u.homeZone ? (
+                        <p className="mt-1 text-[11px] text-ops-ink/45">
+                          {u.homeZone.name}
+                        </p>
+                      ) : null}
                     </td>
                     <td className={tdClass}>
-                      <Badge tone={u.isActive ? "success" : "neutral"} dot>
-                        {u.isActive ? "Actif" : "Désactivé"}
-                      </Badge>
+                      <div className="flex flex-col items-start gap-1.5">
+                        <Badge tone={APPROVAL_TONE[approval]} dot>
+                          {APPROVAL_LABEL[approval]}
+                        </Badge>
+                        <Badge tone={u.isActive ? "success" : "neutral"} dot>
+                          {u.isActive ? "Actif" : "Désactivé"}
+                        </Badge>
+                      </div>
                     </td>
                     <td className={`${tdClass} text-right`}>
                       <div className="inline-flex flex-wrap justify-end gap-2">
+                        {canVerify && approval === "PENDING" ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="success"
+                              icon={Check}
+                              loading={busyId === u.id}
+                              onClick={() => void setApproval(u, "APPROVED")}
+                            >
+                              Approuver
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              icon={X}
+                              loading={busyId === u.id}
+                              onClick={() => void setApproval(u, "REJECTED")}
+                            >
+                              Refuser
+                            </Button>
+                          </>
+                        ) : null}
+                        {canVerify && approval === "REJECTED" ? (
+                          <Button
+                            size="sm"
+                            variant="success"
+                            icon={Check}
+                            loading={busyId === u.id}
+                            onClick={() => void setApproval(u, "APPROVED")}
+                          >
+                            Approuver
+                          </Button>
+                        ) : null}
                         {editable ? (
                           <Button
                             size="sm"

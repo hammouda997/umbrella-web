@@ -30,6 +30,7 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -66,6 +67,14 @@ function errorMessage(body: unknown, status: number): string {
   return `Erreur serveur (${status})`;
 }
 
+function errorCode(body: unknown): string | undefined {
+  if (body && typeof body === "object" && "code" in body) {
+    const code = (body as { code: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  return undefined;
+}
+
 function parseBody(raw: BodyInit | null | undefined): unknown {
   if (typeof raw !== "string" || !raw) return undefined;
   try {
@@ -80,7 +89,9 @@ async function mockRequest<T>(method: string, path: string, body: unknown, token
   try {
     return mockHandle(method, path, body, token) as T;
   } catch (error) {
-    if (error instanceof MockHttpError) throw new ApiError(error.status, error.message);
+    if (error instanceof MockHttpError) {
+      throw new ApiError(error.status, error.message, error.code);
+    }
     throw error;
   }
 }
@@ -106,7 +117,7 @@ async function httpRequest<T>(
 
   if (!res.ok) {
     const body: unknown = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, errorMessage(body, res.status));
+    throw new ApiError(res.status, errorMessage(body, res.status), errorCode(body));
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();

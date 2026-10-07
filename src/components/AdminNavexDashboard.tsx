@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { MobileOpsDashboard } from "@/components/MobileOpsDashboard";
 import { OpsDashboardLoader } from "@/components/OpsDashboardLoader";
+import { ParcelsManager } from "@/components/ParcelsManager";
 import { apiFetch, type StatusCard } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { buildOpsStatusKpis } from "@/lib/ops-status-kpis";
+import { portalHomeFor } from "@/lib/portal-home";
+import type { AppRole } from "@/lib/roles";
 import type { StatusCategory } from "@/lib/status-categories";
 import { isStatusCategoryIcon } from "@/lib/status-categories";
 
@@ -55,41 +65,71 @@ type RecentParcel = {
   createdAt: string;
 };
 
+const emptyAnalytics = (): AnalyticsPayload => ({
+  kpis: {
+    total: 0,
+    external: 0,
+    internal: 0,
+    delivered: 0,
+    inProgress: 0,
+    returns: 0,
+    awaiting: 0,
+    exchanges: 0,
+    revenue: 0,
+    deliveryRate: 0,
+    returnRate: 0,
+  },
+  soldes: { disponible: 0, enDemande: 0, aVerser: 0, verse: 0 },
+  last7Days: Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const key = d.toISOString().slice(0, 10);
+    return {
+      date: key,
+      label: key.slice(5),
+      total: 0,
+      delivered: 0,
+      external: 0,
+      internal: 0,
+    };
+  }),
+});
+
 export function AdminNavexDashboard({
-  basePath = "/admin",
-  variant = "ops",
+  basePath,
+  role,
 }: {
-  basePath?: string;
-  variant?: "ops" | "sender";
+  basePath: string;
+  role: AppRole;
 }) {
   const { session } = useAuth();
   const root = useRef<HTMLDivElement>(null);
+  const home = useMemo(() => portalHomeFor(role), [role]);
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [statusCards, setStatusCards] = useState<StatusCard[]>([]);
   const [categories, setCategories] = useState<StatusCategory[]>([]);
   const [parcels, setParcels] = useState<RecentParcel[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const isSender = variant === "sender";
+  const [createOpen, setCreateOpen] = useState(false);
+  const token = session?.accessToken;
 
-  useEffect(() => {
-    if (!session?.accessToken) return;
+  const loadDashboard = useCallback(() => {
+    if (!token) return;
     setLoading(true);
     Promise.all([
-      apiFetch<StatusCard[]>("/dashboard/status-counts", {
-        token: session.accessToken,
-      }),
-      apiFetch<AnalyticsPayload>("/dashboard/analytics", {
-        token: session.accessToken,
-      }),
-      apiFetch<RecentParcel[]>("/parcels", { token: session.accessToken }),
-      apiFetch<StatusCategory[]>("/status-categories", {
-        token: session.accessToken,
-      }).catch(() => [] as StatusCategory[]),
+      apiFetch<StatusCard[]>("/dashboard/status-counts", { token }),
+      apiFetch<AnalyticsPayload>("/dashboard/analytics", { token }).catch(
+        () => emptyAnalytics(),
+      ),
+      apiFetch<RecentParcel[]>("/parcels", { token }),
+      apiFetch<StatusCategory[]>("/status-categories", { token }).catch(
+        () => [] as StatusCategory[],
+      ),
     ])
       .then(([counts, stats, list, cats]) => {
         setStatusCards(counts);
-        setAnalytics(stats);
+        setAnalytics(stats ?? emptyAnalytics());
         setParcels(list);
         setCategories(
           cats.filter((c) => isStatusCategoryIcon(String(c.icon))),
@@ -97,7 +137,11 @@ export function AdminNavexDashboard({
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [session]);
+  }, [token]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   const recent = useMemo(() => parcels.slice(0, 12), [parcels]);
   const returns = useMemo(
@@ -116,14 +160,29 @@ export function AdminNavexDashboard({
     const countsByStatus = new Map(
       statusCards.map((card) => [card.key, card.count] as const),
     );
+    const filteredTotal = home.kpiStatusKeys?.length
+      ? home.kpiStatusKeys.reduce(
+          (sum, key) => sum + (countsByStatus.get(key) ?? 0),
+          0,
+        )
+      : analytics?.kpis.total;
+
     return buildOpsStatusKpis({
       basePath,
       countsByStatus,
-      totalLabel: isSender ? "Mes colis" : "Total",
-      totalCount: analytics?.kpis.total,
+      totalLabel: home.totalLabel,
+      totalCount: filteredTotal,
       categories,
+      statusKeysFilter: home.kpiStatusKeys,
     });
-  }, [analytics?.kpis.total, basePath, categories, isSender, statusCards]);
+  }, [
+    analytics?.kpis.total,
+    basePath,
+    categories,
+    home.kpiStatusKeys,
+    home.totalLabel,
+    statusCards,
+  ]);
 
   useGSAP(
     () => {
@@ -146,6 +205,9 @@ export function AdminNavexDashboard({
 
   const kpis = analytics?.kpis;
   const firstName = session?.user.name?.split(/\s+/)[0] ?? "";
+  const canCreateOnHome =
+    home.primaryAction === "create-parcel" ||
+    home.shortcuts.some((s) => s.action === "create-parcel");
 
   return (
     <div ref={root}>
@@ -161,14 +223,10 @@ export function AdminNavexDashboard({
         <MobileOpsDashboard
           basePath={basePath}
           firstName={firstName}
-          subtitle={
-            isSender
-              ? "Votre activité d'aujourd'hui en un coup d'œil."
-              : "Voici un aperçu de votre activité aujourd'hui."
-          }
+          home={home}
           kpis={statusKpis}
           revenue={kpis.revenue}
-          solde={analytics?.soldes?.disponible ?? 0}
+          solde={home.showSolde ? (analytics?.soldes?.disponible ?? 0) : null}
           inProgress={kpis.inProgress}
           delivered={kpis.delivered}
           deliveryRate={kpis.deliveryRate}
@@ -177,8 +235,22 @@ export function AdminNavexDashboard({
           recent={recent}
           returns={returns}
           deliveredRecent={deliveredRecent}
-          isSender={isSender}
+          onCreateParcel={
+            canCreateOnHome ? () => setCreateOpen(true) : undefined
+          }
         />
+      ) : null}
+
+      {canCreateOnHome ? (
+        <Suspense fallback={null}>
+          <ParcelsManager
+            canCreate
+            createOnly
+            createOpen={createOpen}
+            onCreateOpenChange={setCreateOpen}
+            onCreated={() => loadDashboard()}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

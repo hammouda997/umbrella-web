@@ -14,6 +14,6 @@ const AdminNavexDashboard = dynamic(
   },
 );
 
-export default function SuperAdminPage() {
-  return <AdminNavexDashboard basePath="/super-admin" />;
+export default function SuperAdminDashboardPage() {
+  return <AdminNavexDashboard basePath="/super-admin" role="SUPER_ADMIN" />;
 }

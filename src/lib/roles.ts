@@ -40,9 +40,21 @@ export const AGENCY_ROLES: AppRole[] = [
   "MAGASINIER",
 ];
 
-/** Delivery channel (EXTERNAL / INTERNAL) is super-admin only. */
+const MODE_ROLES: AppRole[] = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "CHEF_AGENCE",
+  "EXPEDITEUR",
+];
+
+/** Who can pick / see Navex vs Umbrella on create & lists. */
 export function canSeeDeliveryMode(role?: AppRole | null): boolean {
-  return role === "SUPER_ADMIN";
+  return !!role && MODE_ROLES.includes(role);
+}
+
+/** Who can switch an existing parcel INTERNAL ↔ EXTERNAL. */
+export function canSwitchDeliveryMode(role?: AppRole | null): boolean {
+  return !!role && MODE_ROLES.includes(role);
 }
 
 export function roleNeedsAgency(role: AppRole): boolean {
